@@ -1,0 +1,22 @@
+*~
+__pycache__/
+*.pyc
+*.pyo
+
+# figures
+figures/
+*.jpg
+*.jpeg
+*.tiff
+*.bmp
+*.eps
+*.png
+*.pdf
+
+# data files
+*.npy
+*.npz
+*.csv
+*.txt
+*.mat
+*.fig
