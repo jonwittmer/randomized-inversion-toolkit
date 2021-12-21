@@ -15,7 +15,8 @@ class NumpyDirectSolver(Solver):
         pass
     
     def solve(self, A, b):
-        return np.linalg.lstsq(A, b)
+        output = np.linalg.lstsq(A, b)
+        return output[0]
 
 class CgSolver(Solver):
     def __init__(self):
