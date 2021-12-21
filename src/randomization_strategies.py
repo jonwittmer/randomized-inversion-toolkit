@@ -32,7 +32,10 @@ class RandomizationStrategy:
         self.random_vector_generator = random_vector_generator
         self.n_random_samples = n_random_samples
         self.parameter_dim = forward_map.shape[1]
+        
         self.solver = self.getSolver(solver)
+        print('using {} as solver'.format(self.solver.name))
+
         self.reshapePriorMean()
         self.hessian = None
 
@@ -40,6 +43,7 @@ class RandomizationStrategy:
         # set to None for now, the methods will implement these matrices if needed
         self.noise_covariance = None
         self.prior_covariance = None
+        
 
     def getCovarianceFromInverse(self, inv_covariance):
         # this function will not be called if # to avoid calling np.linalg.inv().
@@ -120,7 +124,6 @@ class NoRandomizationStrategy(RandomizationStrategy):
 class LeftSketchingStrategy(RandomizationStrategy):
     def __init__(self, data, forward_map, inv_noise_covariance, prior_mean, inv_prior_covariance, random_vector_generator, n_random_samples, solver):
         super().__init__(data, forward_map, inv_noise_covariance, prior_mean, inv_prior_covariance, random_vector_generator, n_random_samples, solver)
-        print(self.solver)
         self.name = 'left sketching'
 
     def formHessian(self):
@@ -138,7 +141,6 @@ class LeftSketchingStrategy(RandomizationStrategy):
     def drawRandomVectors(self):            
         self.projection_vectors = self.random_vector_generator(np.zeros_like(self.data), self.inv_noise_covariance, self.n_random_samples).T
         self.projection_vectors *= 1 / (self.n_random_samples**0.5)
-        print(self.projection_vectors.shape)
         
     def solve(self):
         self.convertCovariancesToMatrices()
@@ -323,7 +325,7 @@ class RightSketchU2Strategy(RandomizationStrategy):
             
         rhs = self.data - self.forward_map @ self.prior_mean
         temp = self.solver.solve(self.innovation, rhs)
-        return self.prior_mean + self.prior_covariance @ (self.forward_map.transpose() @ temp)
+        return self.prior_mean + self.projection_vectors @ (self.projection_vectors.T @ (self.forward_map.transpose() @ temp))
 
 class EnkfStrategy(RandomizationStrategy):
     def __init__(self, data, forward_map, inv_noise_covariance, prior_mean, inv_prior_covariance, random_vector_generator, n_random_samples, solver):
@@ -356,7 +358,7 @@ class EnkfStrategy(RandomizationStrategy):
             
         rhs = self.data + data_perturbation - self.forward_map @ (self.prior_mean + prior_perturbation)
         temp = self.solver.solve(self.innovation, rhs)
-        return self.prior_mean + self.prior_covariance @ (self.forward_map.transpose() @ temp)
+        return self.prior_mean +  self.projection_vectors @ (self.projection_vectors.T @ (self.forward_map.transpose() @ temp))
 
     # allocate storage for all realizations
     def solve(self):

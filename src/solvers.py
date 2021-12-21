@@ -12,7 +12,7 @@ class Solver:
 
 class NumpyDirectSolver(Solver):
     def __init__(self):
-        pass
+        self.name = 'numpy least squares'
     
     def solve(self, A, b):
         output = np.linalg.lstsq(A, b)
@@ -20,10 +20,11 @@ class NumpyDirectSolver(Solver):
 
 class CgSolver(Solver):
     def __init__(self):
-        pass
+        self.name = 'cg'
 
     # A can be a matrix or a LinearOperator
     def solve(self, A, b):
-        return sc.sparse.linalg.cg(A, b)
+        output = sp.sparse.linalg.cg(A, b)
+        return output[0]
         
         

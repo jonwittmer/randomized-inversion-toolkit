@@ -55,7 +55,7 @@ if __name__ == '__main__':
     alpha = 2 * np.pi
     noise_level = 0.05
     regularization = 5 # we will use identiy prior_covariance, parameterized by scalar given here
-    n_random_samples = 50
+    n_random_samples = 500
     random_vector_generator = np.random.multivariate_normal
     
     observation_coords, observations = generateObservations(n_observations, alpha)
