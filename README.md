@@ -8,7 +8,9 @@ The code is broken down into 3 main sections:
 
 ### src
 This directory contains the `RandomizationStrategy` code along with solvers/optimizers that are compatible with randomization strategies. Each `RandomizationStrategy` is designed to be interchangeable in application code by just changing the strategy. The only method that should be called from application code is: 
+
     solution = RandomizationStrategy.solve()
+
 This makes it easy for application code to change strategy. 
 
 Currently, 2 solvers are supported: numpy's least squares solver and scipy's conjugate gradient solver. The wrapper classes provided are meant to provide a consistent interface to various solvers so that application code can change solvers with minimal code modification. 
