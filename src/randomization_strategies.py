@@ -90,7 +90,7 @@ class RandomizationStrategy:
 class NoRandomizationStrategy(RandomizationStrategy):
     def __init__(self, data, forward_map, inv_noise_covariance, prior_mean, inv_prior_covariance, random_vector_generator, n_random_samples, solver):
         super().__init__(data, forward_map, inv_noise_covariance, prior_mean, inv_prior_covariance, random_vector_generator, n_random_samples, solver)
-        self.name = 'no randomization'
+        self.name = 'no\_rand'
         
     def formHessian(self):
         if isinstance(self.forward_map, sp.sparse.linalg.LinearOperator):
@@ -124,7 +124,7 @@ class NoRandomizationStrategy(RandomizationStrategy):
 class LeftSketchingStrategy(RandomizationStrategy):
     def __init__(self, data, forward_map, inv_noise_covariance, prior_mean, inv_prior_covariance, random_vector_generator, n_random_samples, solver):
         super().__init__(data, forward_map, inv_noise_covariance, prior_mean, inv_prior_covariance, random_vector_generator, n_random_samples, solver)
-        self.name = 'left sketching'
+        self.name = 'RMA'
 
     def formHessian(self):
         if isinstance(self.forward_map, sp.sparse.linalg.LinearOperator):
@@ -160,7 +160,7 @@ class LeftSketchingStrategy(RandomizationStrategy):
 class RmapStrategy(RandomizationStrategy):
     def __init__(self, data, forward_map, inv_noise_covariance, prior_mean, inv_prior_covariance, random_vector_generator, n_random_samples, solver):
         super().__init__(data, forward_map, inv_noise_covariance, prior_mean, inv_prior_covariance, random_vector_generator, n_random_samples, solver)
-        self.name = 'rmap'
+        self.name = 'RMAP'
         
     def formHessian(self):
         if isinstance(self.forward_map, sp.sparse.linalg.LinearOperator):
@@ -204,7 +204,7 @@ class RmapStrategy(RandomizationStrategy):
 class LeftSketchingRmapStrategy(RandomizationStrategy):
     def __init__(self, data, forward_map, inv_noise_covariance, prior_mean, inv_prior_covariance, random_vector_generator, n_random_samples, solver):
         super().__init__(data, forward_map, inv_noise_covariance, prior_mean, inv_prior_covariance, random_vector_generator, n_random_samples, solver)
-        self.name = 'left sketching + rmap'
+        self.name = 'RMA+RMAP'
         
     def formHessian(self):
         if isinstance(self.forward_map, sp.sparse.linalg.LinearOperator):
@@ -254,7 +254,7 @@ class LeftSketchingRmapStrategy(RandomizationStrategy):
 class RightSketchU1Strategy(RandomizationStrategy):
     def __init__(self, data, forward_map, inv_noise_covariance, prior_mean, inv_prior_covariance, random_vector_generator, n_random_samples, solver):
         super().__init__(data, forward_map, inv_noise_covariance, prior_mean, inv_prior_covariance, random_vector_generator, n_random_samples, solver)
-        self.name = 'right sketching u1'
+        self.name = 'RS\_U1'
         
     def formHessian(self):            
         if isinstance(self.forward_map, sp.sparse.linalg.LinearOperator):
@@ -291,7 +291,7 @@ class RightSketchU2Strategy(RandomizationStrategy):
     def __init__(self, data, forward_map, inv_noise_covariance, prior_mean, inv_prior_covariance, random_vector_generator, n_random_samples, solver):
         super().__init__(data, forward_map, inv_noise_covariance, prior_mean, inv_prior_covariance, random_vector_generator, n_random_samples, solver)
         self.innovation = None
-        self.name = 'right sketching'
+        self.name = 'RS'
 
     def drawRandomVectors(self):
         if self.prior_covariance is None:
@@ -331,7 +331,7 @@ class EnkfStrategy(RandomizationStrategy):
     def __init__(self, data, forward_map, inv_noise_covariance, prior_mean, inv_prior_covariance, random_vector_generator, n_random_samples, solver):
         super().__init__(data, forward_map, inv_noise_covariance, prior_mean, inv_prior_covariance, random_vector_generator, n_random_samples, solver)
         self.innovation = None
-        self.name = 'enkf'
+        self.name = 'ENKF'
 
     def drawRandomVectors(self):
         if self.prior_covariance is None:
