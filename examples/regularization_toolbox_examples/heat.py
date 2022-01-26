@@ -52,7 +52,7 @@ if __name__ == '__main__':
     noise_level = 0.01
     regularization = 50 # we will use identiy prior_covariance, parameterized by scalar given here
     random_vector_generator = np.random.multivariate_normal
-    solver_type = 'cg'
+    solver_type = 'direct'
     problem_name = 'Heat'
     
     observation_coords, observations = generateObservations(n_observations)

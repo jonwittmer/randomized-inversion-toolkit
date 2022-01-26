@@ -23,7 +23,7 @@ def writeLatexTables(results, save_filename):
         for method in methods:
             curr_results = ''
             for err in results[method]['rel_error']:
-                curr_results += '&' + '{:0.2f}'.format(err*100) 
+                curr_results += ' & ' + '{:0.2f}'.format(err*100) 
             writeLine(fp, f"    \\text{{{method}}} {curr_results}  \\\\ \cline{{1-{n_samples+1}}}")
         writeLine(fp, "  \end{tabular}")
         writeLine(fp, "  \caption{INSERT CAPTION}")

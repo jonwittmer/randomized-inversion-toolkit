@@ -64,7 +64,7 @@ if __name__ == '__main__':
     data = observations + np.amax(observations) * np.random.normal(0, noise_level, observations.shape)
     forward_map = buildForwardMatrix(n_observations)
     
-    solver_type = 'cg'
+    solver_type = 'direct'
     problem_name = 'Phillips'
 
     # generate u1 solution only once
