@@ -1,6 +1,7 @@
 import os
 import sys
 sys.path.append('../../')
+import json
 
 import numpy as np
 import scipy as sp
@@ -8,6 +9,8 @@ import scipy.ndimage
 import matplotlib.pyplot as plt
 
 from src.randomization_strategies import Strategies
+from utils.generate_figures import generateFigures
+from utils.generate_tables import writeLatexTables
 
 # returns a unit basis vector with 1 in the index position
 def canonicalBasisVector(size, index):
@@ -51,11 +54,10 @@ if __name__ == '__main__':
     np.random.seed(20)
 
     # problem setup
-    n_observations = 500
+    n_observations = 1000
     alpha = 2 * np.pi
     noise_level = 0.05
-    regularization = 5 # we will use identiy prior_covariance, parameterized by scalar given here
-    n_random_samples = 500
+    regularization = 20 # we will use identiy prior_covariance, parameterized by scalar given here
     random_vector_generator = np.random.multivariate_normal
     
     observation_coords, observations = generateObservations(n_observations, alpha)
@@ -64,12 +66,39 @@ if __name__ == '__main__':
     forward_map = buildForwardMatrix(n_observations)
     
     solver_type = 'direct'
+    problem_name = '1D_Deconvolution'
+
+    # generate u1 solution only once
+    no_randomizaton_solver = Strategies.NO_RANDOMIZATION(data, forward_map, 1 / (noise_level**2), 0, regularization, random_vector_generator, 0, solver_type)
+    u1_solution = no_randomizaton_solver.solve()
     
-    randomized_solver = Strategies.ENKF(data, forward_map, 1 / (noise_level**2), 0, regularization, random_vector_generator, n_random_samples, solver_type)
-    ls_solution = randomized_solver.solve()
-    fig, ax = plt.subplots()
-    ax.plot(observation_coords, true_parameter, label='true parameter')
-    ax.plot(observation_coords, ls_solution, label=randomized_solver.name + ' solution')
-    ax.set_title(str(n_random_samples) + ' samples')
-    ax.legend()
-    plt.show()
+    n_random_samples = [10, 100,  500, 1000]
+    test_strategies = [
+        Strategies.RMAP,
+        Strategies.RMA,
+        Strategies.RMA_RMAP,
+        Strategies.RS_U1,
+         Strategies.RS,
+        Strategies.ENKF,
+    ]
+    results = {}
+    
+    for curr_strategy in test_strategies:
+        rand_solutions = []
+        rand_labels = []
+        for samples in n_random_samples:
+            rand_labels.append(f"N = {samples}")
+            randomized_solver = curr_strategy(data, forward_map, 1 / (noise_level**2), 0, regularization, random_vector_generator, samples, solver_type)
+            rand_solutions.append(randomized_solver.solve())
+            
+            if randomized_solver.name not in results:
+                results[randomized_solver.name] = {"samples": [], "rel_error": []}
+            results[randomized_solver.name]["samples"].append(samples)
+            results[randomized_solver.name]["rel_error"].append(np.linalg.norm(rand_solutions[-1] - u1_solution) / np.linalg.norm(u1_solution))
+            print(f"N = {samples}    error = {results[randomized_solver.name]['rel_error'][-1]}")
+        print()
+        generateFigures(observation_coords, u1_solution, rand_solutions, rand_labels,
+                        f"figures/{problem_name}/{randomized_solver.name}.png", lims={"ylim": [-1.75, 1.75]})
+
+    writeLatexTables(results, f'{problem_name}_table.tex')
+    
