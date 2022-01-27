@@ -49,13 +49,13 @@ if __name__ == '__main__':
     no_randomizaton_solver = Strategies.NO_RANDOMIZATION(data, forward_map, 1 / (noise_level**2), 0, regularization, random_vector_generator, 0, solver_type)
     u1_solution = no_randomizaton_solver.solve()
     
-    n_random_samples = [10, 100, 500, 1000]
+    n_random_samples = [10, 100, 1000, 10000]
     test_strategies = [
         Strategies.RMAP,
         Strategies.RMA,
         Strategies.RMA_RMAP,
         Strategies.RS_U1,
-         Strategies.RS,
+        Strategies.RS,
         Strategies.ENKF,
     ]
     results = {}
