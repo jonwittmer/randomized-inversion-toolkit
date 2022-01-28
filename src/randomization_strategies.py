@@ -105,10 +105,7 @@ class NoRandomizationStrategy(RandomizationStrategy):
             self.hessian = self.forward_map.T @ self.inv_noise_covariance @ self.forward_map + self.inv_prior_covariance
         
     def solve(self):
-        if isScalar(self.inv_prior_covariance):
-            self.inv_prior_covariance = self.inv_prior_covariance * np.identity(self.parameter_dim)
-        if isScalar(self.inv_noise_covariance):
-            self.inv_noise_covariance = self.inv_noise_covariance * np.identity(self.parameter_dim)
+        self.convertCovariancesToMatrices()
             
         # form right hand side without storing intermediate matrices (only matvec products)
         rhs = self.inv_noise_covariance @ self.data

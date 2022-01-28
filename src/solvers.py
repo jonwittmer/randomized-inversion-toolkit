@@ -21,10 +21,13 @@ class NumpyDirectSolver(Solver):
 class CgSolver(Solver):
     def __init__(self):
         self.name = 'cg'
-
+        self.atol = None
+        self.tol = None
+        self.maxiter = None
+        
     # A can be a matrix or a LinearOperator
     def solve(self, A, b):
-        output = sp.sparse.linalg.cg(A, b)
+        output = sp.sparse.linalg.cg(A, b, atol=self.atol, tol=self.tol, maxiter=self.maxiter)
         return output[0]
         
         
