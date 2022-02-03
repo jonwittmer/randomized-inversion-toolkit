@@ -13,6 +13,7 @@ class Solver:
 class NumpyDirectSolver(Solver):
     def __init__(self):
         self.name = 'numpy least squares'
+        self.solver_type = 'direct'
     
     def solve(self, A, b):
         output = np.linalg.lstsq(A, b)
@@ -21,8 +22,9 @@ class NumpyDirectSolver(Solver):
 class CgSolver(Solver):
     def __init__(self):
         self.name = 'cg'
+        self.solver_type = 'iterative'
         self.atol = None
-        self.tol = None
+        self.tol = 1e-5
         self.maxiter = None
         
     # A can be a matrix or a LinearOperator

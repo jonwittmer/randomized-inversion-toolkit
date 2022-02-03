@@ -50,7 +50,7 @@ class RandomizationStrategy:
         if isScalar(inv_covariance):
             return 1 / inv_covariance
         else:
-            return np.linalg.inv(self.inv_noise_covariance)
+            return np.linalg.inv(inv_covariance)
         
     def getSolver(self, solver):
         if isinstance(solver, str):
@@ -171,14 +171,14 @@ class RmapStrategy(RandomizationStrategy):
         else:
             self.hessian = self.forward_map.T @ self.inv_noise_covariance @ self.forward_map + self.inv_prior_covariance
 
-    def solveRealization(self, data_perturbation, prior_perturbation):
+    def solveRealization(self, pertubed_data, perturbed_prior_mean):
         # form hessian if not already formed
         if self.hessian is None:
             self.formHessian()
             
         # form right hand side without storing intermediate matrices (only matvec products)
-        rhs = self.inv_noise_covariance @ (self.data + data_perturbation)
-        rhs = self.forward_map.transpose() @ rhs + self.inv_prior_covariance @ (self.prior_mean + prior_perturbation)
+        rhs = self.inv_noise_covariance @ pertubed_data
+        rhs = self.forward_map.transpose() @ rhs + self.inv_prior_covariance @ perturbed_prior_mean
             
         return self.solver.solve(self.hessian, rhs)
         
@@ -188,13 +188,22 @@ class RmapStrategy(RandomizationStrategy):
         if self.prior_covariance is None:
             self.prior_covariance = self.getCovarianceFromInverse(self.inv_prior_covariance)
         self.convertCovariancesToMatrices()
-        
-        # allocate storage for all realizations
-        results = np.zeros((self.parameter_dim, self.n_random_samples))
-        for i in range(self.n_random_samples):
+
+        # if we are using a direct solver, such as superLU, no need to recompute factorization for each realization
+        if self.solver.solver_type == 'direct':
+            expanded_data = np.tile(self.data, (1, self.n_random_samples))
+            print(expanded_data.shape)
+            expanded_prior_mean = np.tile(self.prior_mean, (1, self.n_random_samples))
             data_perturbation = self.random_vector_generator(np.zeros_like(self.data), self.noise_covariance, 1).reshape(self.data.shape)
             prior_perturbation = self.random_vector_generator(np.zeros_like(self.prior_mean), self.prior_covariance, 1).reshape(self.prior_mean.shape)
-            results[:, i] = np.reshape(self.solveRealization(data_perturbation, prior_perturbation), (self.parameter_dim,))
+            results = self.solveRealization(expanded_data + data_perturbation, expanded_prior_mean + prior_perturbation)
+        else:            
+            # allocate storage for all realizations
+            results = np.zeros((self.parameter_dim, self.n_random_samples))
+            for i in range(self.n_random_samples):
+                data_perturbation = self.random_vector_generator(np.zeros_like(self.data), self.noise_covariance, 1).reshape(self.data.shape)
+                prior_perturbation = self.random_vector_generator(np.zeros_like(self.prior_mean), self.prior_covariance, 1).reshape(self.prior_mean.shape)
+                results[:, i] = np.reshape(self.solveRealization(self.data + data_perturbation, self.prior_mean + prior_perturbation), (self.parameter_dim,))
         return np.mean(results, axis=1)
 
 
