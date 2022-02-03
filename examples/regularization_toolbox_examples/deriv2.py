@@ -8,6 +8,7 @@ import scipy.ndimage
 import matplotlib.pyplot as plt
 
 from src.randomization_strategies import Strategies
+from src.random_sampling import scaledIdentityCovGenerator
 from utils.generate_figures import generateFigures
 from utils.generate_tables import writeLatexTables
     
@@ -44,28 +45,45 @@ if __name__ == '__main__':
     n_observations = 1000
     noise_level = 0.01
     regularization = 6.5 # we will use identiy prior_covariance, parameterized by scalar given here
-    random_vector_generator = np.random.multivariate_normal
+    #random_vector_generator = np.random.multivariate_normal
+    random_vector_generator = scaledIdentityCovGenerator
     
     observation_coords, observations = generateObservations(n_observations)
     true_parameter = trueParameter(observation_coords)
     data = observations + np.amax(observations) * np.random.normal(0, noise_level, observations.shape)
+    noise_std = noise_level * np.amax(observations)
     forward_map = buildForwardMatrix(n_observations)
     
     solver_type = 'direct'
     problem_name = 'Deriv2'
 
     # generate u1 solution only once
-    no_randomizaton_solver = Strategies.NO_RANDOMIZATION(data, forward_map, 1 / (noise_level**2), 0, regularization, random_vector_generator, 0, solver_type)
+    no_randomizaton_solver = Strategies.NO_RANDOMIZATION(data, forward_map, 1 / (noise_std**2), 0, regularization, random_vector_generator, 0, solver_type)
     u1_solution = no_randomizaton_solver.solve()
+
+    # l-curve
+    regs  = np.logspace(-5, 5, 15)
+    lcurve_sols = []
+    for reg in regs:
+        no_randomization_solver = Strategies.NO_RANDOMIZATION(data, forward_map, 1 / (noise_std**2), 0, reg, random_vector_generator, 0, solver_type)
+        no_randomization_solver.solver.atol = 1e-5
+        no_randomization_solver.solver.tol = 1e-5
+        no_randomization_solver.solver.maxiter = 1000
+        u1_solution = no_randomization_solver.solve().reshape(true_parameter.shape)
+        lcurve_sols.append(np.linalg.norm(u1_solution - true_parameter) / np.linalg.norm(true_parameter))
+
+    fig, ax = plt.subplots()
+    ax.plot(regs, lcurve_sols)
+    plt.show()
     
     n_random_samples = [10, 100, 1000, 10000]
     test_strategies = [
         Strategies.RMAP,
         Strategies.RMA,
-        Strategies.RMA_RMAP,
-        Strategies.RS_U1,
-         Strategies.RS,
-        Strategies.ENKF,
+        # Strategies.RMA_RMAP,
+        # Strategies.RS_U1,
+        # Strategies.RS,
+        # Strategies.ENKF,
     ]
     results = {}
     
@@ -74,7 +92,7 @@ if __name__ == '__main__':
         rand_labels = []
         for samples in n_random_samples:
             rand_labels.append(f"N = {samples}")
-            randomized_solver = curr_strategy(data, forward_map, 1 / (noise_level**2), 0, regularization, random_vector_generator, samples, solver_type)
+            randomized_solver = curr_strategy(data, forward_map, 1 / (noise_std**2), 0, regularization, random_vector_generator, samples, solver_type)
             rand_solutions.append(randomized_solver.solve())
             
             if randomized_solver.name not in results:

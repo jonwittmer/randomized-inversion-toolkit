@@ -191,11 +191,14 @@ class RmapStrategy(RandomizationStrategy):
 
         # if we are using a direct solver, such as superLU, no need to recompute factorization for each realization
         if self.solver.solver_type == 'direct':
-            expanded_data = np.tile(self.data.reshape((self.data.shape[0], 1)), (1, self.n_random_samples))
-            expanded_prior_mean = np.tile(self.prior_mean.reshape((self.prior_mean.shape[0], 1)), (1, self.n_random_samples))
-            data_perturbation = self.random_vector_generator(np.zeros_like(expanded_data), self.noise_covariance, 1).reshape(self.data.shape)
-            prior_perturbation = self.random_vector_generator(np.zeros_like(self.prior_mean), self.prior_covariance, 1).reshape(self.prior_mean.shape)
-            results = self.solveRealization(expanded_data + data_perturbation, expanded_prior_mean + prior_perturbation)
+            perturbed_data = np.tile(self.data.reshape((self.data.shape[0], 1)), (1, self.n_random_samples))
+            perturbed_prior_mean = np.tile(self.prior_mean.reshape((self.prior_mean.shape[0], 1)), (1, self.n_random_samples))
+            print('sampling')
+            for i in range(self.n_random_samples):
+                perturbed_data[:, i] += self.random_vector_generator(np.zeros_like(self.data), self.noise_covariance, 1).reshape(self.data.shape)
+                perturbed_prior_mean[:, i] += self.random_vector_generator(np.zeros_like(self.prior_mean), self.prior_covariance, 1).reshape(self.prior_mean.shape)
+            print('solving system')
+            results = self.solveRealization(perturbed_data, perturbed_prior_mean)
         else:            
             # allocate storage for all realizations
             results = np.zeros((self.parameter_dim, self.n_random_samples))

@@ -87,7 +87,7 @@ if __name__ == '__main__':
     saveSolution(u1_solution, problem_name, 'u1', 0)
 
     # l-curve
-    # regs  = np.logspace(-2, 5, 15)
+    # regs  = np.logspace(-5, 5, 15)
     # lcurve_sols = []
     # for reg in regs:
     #     no_randomization_solver = Strategies.NO_RANDOMIZATION(data, forward_map, 1 / (noise_level**2), 0, reg, random_vector_generator, 0, solver_type)
