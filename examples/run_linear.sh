@@ -10,3 +10,6 @@ python gravity.py
 python heat.py
 python phillips.py
 python shaw.py
+
+cd ../xray_tomography
+python xray_tomography.py

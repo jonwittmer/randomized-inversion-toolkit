@@ -230,14 +230,14 @@ class LeftSketchingRmapStrategy(RandomizationStrategy):
         self.projection_vectors = self.random_vector_generator(np.zeros_like(self.data), self.inv_noise_covariance, self.n_random_samples).T
         self.projection_vectors *= 1 / (self.n_random_samples**0.5)
         
-    def solveRealization(self, data_perturbation, prior_perturbation):
+    def solveRealization(self, perturbed_data, perturbed_prior_mean):
         # form hessian if not already formed
         if self.hessian is None:
             self.formHessian()
             
         # form right hand side without storing intermediate matrices (only matvec products)
-        rhs = self.projection_vectors @ (self.projection_vectors.T @ (self.data + data_perturbation))
-        rhs = self.forward_map.transpose() @ rhs + self.inv_prior_covariance @ (self.prior_mean + prior_perturbation)
+        rhs = self.projection_vectors @ (self.projection_vectors.T @ perturbed_data)
+        rhs = self.forward_map.transpose() @ rhs + self.inv_prior_covariance @ perturbed_prior_mean
             
         return self.solver.solve(self.hessian, rhs)
 
@@ -250,12 +250,22 @@ class LeftSketchingRmapStrategy(RandomizationStrategy):
         self.convertCovariancesToMatrices()
         self.drawRandomVectors()
         
-        # allocate storage for all realizations
-        results = np.zeros((self.parameter_dim, self.n_random_samples))
-        for i in range(self.n_random_samples):
-            data_perturbation = self.random_vector_generator(np.zeros_like(self.data), self.noise_covariance, 1).reshape(self.data.shape)
-            prior_perturbation = self.random_vector_generator(np.zeros_like(self.prior_mean), self.prior_covariance, 1).reshape(self.prior_mean.shape)
-            results[:, i] = np.reshape(self.solveRealization(data_perturbation, prior_perturbation), (self.parameter_dim,))
+        if self.solver.solver_type == 'direct':
+            perturbed_data = np.tile(self.data.reshape((self.data.shape[0], 1)), (1, self.n_random_samples))
+            perturbed_prior_mean = np.tile(self.prior_mean.reshape((self.prior_mean.shape[0], 1)), (1, self.n_random_samples))
+            print('sampling')
+            for i in range(self.n_random_samples):
+                perturbed_data[:, i] += self.random_vector_generator(np.zeros_like(self.data), self.noise_covariance, 1).reshape(self.data.shape)
+                perturbed_prior_mean[:, i] += self.random_vector_generator(np.zeros_like(self.prior_mean), self.prior_covariance, 1).reshape(self.prior_mean.shape)
+            print('solving system')
+            results = self.solveRealization(perturbed_data, perturbed_prior_mean)
+        else:
+            # allocate storage for all realizations
+            results = np.zeros((self.parameter_dim, self.n_random_samples))
+            for i in range(self.n_random_samples):
+                data_perturbation = self.random_vector_generator(np.zeros_like(self.data), self.noise_covariance, 1).reshape(self.data.shape)
+                prior_perturbation = self.random_vector_generator(np.zeros_like(self.prior_mean), self.prior_covariance, 1).reshape(self.prior_mean.shape)
+                results[:, i] = np.reshape(self.solveRealization(self.data + data_perturbation, self.prior_mean + prior_perturbation), (self.parameter_dim,))
         return np.mean(results, axis=1)
     
     
@@ -359,14 +369,14 @@ class EnkfStrategy(RandomizationStrategy):
         else:
             self.innovation = self.forward_map @ self.projection_vectors @ self.projection_vectors.T @ self.forward_map.T + self.noise_covariance
         
-    def solveRealization(self, data_perturbation, prior_perturbation):
+    def solveRealization(self, perturbed_data, perturbed_prior_mean):
         # innovation name comes from Kalman filtering literature
         if self.innovation is None:
             self.formInnovation()
             
-        rhs = self.data + data_perturbation - self.forward_map @ (self.prior_mean + prior_perturbation)
+        rhs = perturbed_data - self.forward_map @ perturbed_prior_mean
         temp = self.solver.solve(self.innovation, rhs)
-        return self.prior_mean +  self.projection_vectors @ (self.projection_vectors.T @ (self.forward_map.transpose() @ temp))
+        return perturbed_prior_mean +  self.projection_vectors @ (self.projection_vectors.T @ (self.forward_map.transpose() @ temp))
 
     # allocate storage for all realizations
     def solve(self):
@@ -376,12 +386,22 @@ class EnkfStrategy(RandomizationStrategy):
             self.prior_covariance = self.getCovarianceFromInverse(self.inv_prior_covariance)
         self.convertCovariancesToMatrices()
         self.drawRandomVectors()
-        
-        results = np.zeros((self.parameter_dim, self.n_random_samples))
-        for i in range(self.n_random_samples):
-            data_perturbation = self.random_vector_generator(np.zeros_like(self.data), self.noise_covariance, 1).reshape(self.data.shape)
-            prior_perturbation = self.random_vector_generator(np.zeros_like(self.prior_mean), self.prior_covariance, 1).reshape(self.prior_mean.shape)
-            results[:, i] = np.reshape(self.solveRealization(data_perturbation, prior_perturbation), (self.parameter_dim,))
+
+        if self.solver.solver_type == 'direct':
+            perturbed_data = np.tile(self.data.reshape((self.data.shape[0], 1)), (1, self.n_random_samples))
+            perturbed_prior_mean = np.tile(self.prior_mean.reshape((self.prior_mean.shape[0], 1)), (1, self.n_random_samples))
+            print('sampling')
+            for i in range(self.n_random_samples):
+                perturbed_data[:, i] += self.random_vector_generator(np.zeros_like(self.data), self.noise_covariance, 1).reshape(self.data.shape)
+                perturbed_prior_mean[:, i] += self.random_vector_generator(np.zeros_like(self.prior_mean), self.prior_covariance, 1).reshape(self.prior_mean.shape)
+            print('solving system')
+            results = self.solveRealization(perturbed_data, perturbed_prior_mean)
+        else:
+            results = np.zeros((self.parameter_dim, self.n_random_samples))
+            for i in range(self.n_random_samples):
+                data_perturbation = self.random_vector_generator(np.zeros_like(self.data), self.noise_covariance, 1).reshape(self.data.shape)
+                prior_perturbation = self.random_vector_generator(np.zeros_like(self.prior_mean), self.prior_covariance, 1).reshape(self.prior_mean.shape)
+                results[:, i] = np.reshape(self.solveRealization(self.data + data_perturbation, self.prior_mean + prior_perturbation), (self.parameter_dim,))
         return np.mean(results, axis=1)
 
 class Strategies:

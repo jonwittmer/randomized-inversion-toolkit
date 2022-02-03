@@ -8,6 +8,7 @@ import scipy.ndimage
 import matplotlib.pyplot as plt
 
 from src.randomization_strategies import Strategies
+from src.random_sampling import scaledIdentityCovGenerator
 from utils.generate_figures import generateFigures
 from utils.generate_tables import writeLatexTables
 
@@ -51,17 +52,18 @@ if __name__ == '__main__':
     n_observations = 1000
     noise_level = 0.01
     regularization = 50 # we will use identiy prior_covariance, parameterized by scalar given here
-    random_vector_generator = np.random.multivariate_normal
+    random_vector_generator = scaledIdentityCovGenerator
     solver_type = 'direct'
     problem_name = 'Heat'
     
     observation_coords, observations = generateObservations(n_observations)
     true_parameter = trueParameter(observation_coords)
     data = observations + np.amax(observations) * np.random.normal(0, noise_level, observations.shape)
+    noise_std = noise_level * np.amax(observations)
     forward_map = buildForwardMatrix(n_observations)
 
     # generate u1 solution only once
-    no_randomizaton_solver = Strategies.NO_RANDOMIZATION(data, forward_map, 1 / (noise_level**2), 0, regularization, random_vector_generator, 0, solver_type)
+    no_randomizaton_solver = Strategies.NO_RANDOMIZATION(data, forward_map, 1 / (noise_std**2), 0, regularization, random_vector_generator, 0, solver_type)
     u1_solution = no_randomizaton_solver.solve()
     
     n_random_samples = [10, 100, 1000, 10000]
@@ -80,7 +82,7 @@ if __name__ == '__main__':
         rand_labels = []
         for samples in n_random_samples:
             rand_labels.append(f"N = {samples}")
-            randomized_solver = curr_strategy(data, forward_map, 1 / (noise_level**2), 0, regularization, random_vector_generator, samples, solver_type)
+            randomized_solver = curr_strategy(data, forward_map, 1 / (noise_std**2), 0, regularization, random_vector_generator, samples, solver_type)
             rand_solutions.append(randomized_solver.solve())
             
             if randomized_solver.name not in results:
@@ -90,7 +92,7 @@ if __name__ == '__main__':
             print(f"N = {samples}    error = {results[randomized_solver.name]['rel_error'][-1]}")
         print()
         generateFigures(observation_coords, u1_solution, rand_solutions, rand_labels,
-                        f"figures/{problem_name}/{randomized_solver.name}.png", lims={"ylim": [-1, 1]})
+                        f"figures/{problem_name}/{randomized_solver.name}.pdf", lims={"ylim": [-1, 1]})
         
     writeLatexTables(results, f'{problem_name}_table.tex')
 

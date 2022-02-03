@@ -11,8 +11,10 @@ import skimage.transform as sk_transform
 import matplotlib.pyplot as plt
 
 from src.randomization_strategies import Strategies
+from src.random_sampling import scaledIdentityCovGenerator
 from utils.generate_tables import writeLatexTables
 from utils.generate_figures import checkDirectory
+from utils.lcurve import computeLCurve
 
 def trueParameter(dimension):
     original = sk_data.shepp_logan_phantom()
@@ -49,7 +51,7 @@ def saveSolution(solution, problem_name, method_name, n_samples):
     fig, ax = plt.subplots(figsize=(3,3))
     ax.imshow(solution, vmin=0, vmax=1, cmap='gray')
     ax.axis('off')
-    fig_name = f'figures/{problem_name}/{method_name}_N{n_samples:04d}.png'
+    fig_name = f'figures/{problem_name}/{method_name}_N{n_samples:04d}.pdf'
     checkDirectory(fig_name)
     plt.savefig(fig_name, pad_inches=0, dpi=300)
     plt.close(fig)
@@ -62,53 +64,38 @@ if __name__ == '__main__':
     image_dimension = 128
     noise_level = 0.01
     regularization = 2500 # we will use identiy prior_covariance, parameterized by scalar given here
-
-    # faster random sample generator for scaled identity covariance
-    def scaledIdentityCovGenerator(mean, cov, n_random_vectors):
-        vecs = np.random.normal(0, cov[0, 0], (mean.shape[0], n_random_vectors)) + mean[:, np.newaxis]
-        return vecs.T
     random_vector_generator = scaledIdentityCovGenerator
     
     true_parameter = trueParameter(image_dimension)
     observations = generateObservations(true_parameter, n_angles)
     forward_map = buildForwardOperator(true_parameter.shape, observations.shape)
     data = observations + np.amax(observations) * np.random.normal(0, noise_level, observations.shape)
+    noise_std = noise_level * np.amax(observations)
     data = data.reshape((-1,))
     
     solver_type = 'cg'
     problem_name = 'xray_tomography'
 
+    def strategyBuilder(reg):
+        return Strategies.NO_RANDOMIZATION(data, forward_map, 1 / (noise_std**2), 0, reg, random_vector_generator, 0, solver_type)
+    computeLCurve(true_parameter, strategyBuilder)
+    
     # generate u1 solution only once
-    no_randomization_solver = Strategies.NO_RANDOMIZATION(data, forward_map, 1 / (noise_level**2), 0, regularization, random_vector_generator, 0, solver_type)
+    no_randomization_solver = Strategies.NO_RANDOMIZATION(data, forward_map, 1 / (noise_std**2), 0, regularization, random_vector_generator, 0, solver_type)
     no_randomization_solver.solver.atol = 1e-5
     no_randomization_solver.solver.tol = 1e-5
     no_randomization_solver.solver.maxiter = 2000
     u1_solution = no_randomization_solver.solve().reshape(true_parameter.shape)
     saveSolution(u1_solution, problem_name, 'u1', 0)
-
-    # l-curve
-    # regs  = np.logspace(-5, 5, 15)
-    # lcurve_sols = []
-    # for reg in regs:
-    #     no_randomization_solver = Strategies.NO_RANDOMIZATION(data, forward_map, 1 / (noise_level**2), 0, reg, random_vector_generator, 0, solver_type)
-    #     no_randomization_solver.solver.atol = 1e-5
-    #     no_randomization_solver.solver.tol = 1e-5
-    #     no_randomization_solver.solver.maxiter = 1000
-    #     u1_solution = no_randomization_solver.solve().reshape(true_parameter.shape)
-    #     lcurve_sols.append(np.linalg.norm(u1_solution - true_parameter) / np.linalg.norm(true_parameter))
-
-    # fig, ax = plt.subplots()
-    # ax.plot(regs, lcurve_sols)
-    # plt.show()
     
     n_random_samples = [10, 1000, 5000]
     test_strategies = [
-        #Strategies.RMAP,
+        Strategies.RMAP,
         Strategies.RMA,
-        #Strategies.RMA_RMAP,
+        Strategies.RMA_RMAP,
         Strategies.RS_U1,
         Strategies.RS,
-        #Strategies.ENKF,
+        Strategies.ENKF,
     ]
     results = {}
     
@@ -117,7 +104,7 @@ if __name__ == '__main__':
         rand_labels = []
         for samples in n_random_samples:
             rand_labels.append(f"N = {samples}")
-            randomized_solver = curr_strategy(data, forward_map, 1 / (noise_level**2), 0, regularization, random_vector_generator, samples, solver_type)
+            randomized_solver = curr_strategy(data, forward_map, 1 / (noise_std**2), 0, regularization, random_vector_generator, samples, solver_type)
             randomized_solver.solver.atol = 1e-5
             randomized_solver.solver.tol = 1e-5
             randomized_solver.solver.maxiter = 2000
@@ -131,6 +118,5 @@ if __name__ == '__main__':
 
             saveSolution(rand_solutions[-1], problem_name, randomized_solver.name, samples)
         print()
-
         
     writeLatexTables(results, f'{problem_name}_table.tex')
