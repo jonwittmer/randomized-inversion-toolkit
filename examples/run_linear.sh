@@ -13,3 +13,8 @@ python shaw.py
 
 cd ../xray_tomography
 python xray_tomography.py
+
+cd ../linear_pde
+python initial_condition_pde.py
+
+cd ..
