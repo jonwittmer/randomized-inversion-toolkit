@@ -191,9 +191,9 @@ class RmapStrategy(RandomizationStrategy):
 
         # if we are using a direct solver, such as superLU, no need to recompute factorization for each realization
         if self.solver.solver_type == 'direct':
-            expanded_data = np.tile(self.data, (1, self.n_random_samples))
+            expanded_data = np.tile(self.data.reshape((self.data.shape[0], 1)), (1, self.n_random_samples))
             print(expanded_data.shape)
-            expanded_prior_mean = np.tile(self.prior_mean, (1, self.n_random_samples))
+            expanded_prior_mean = np.tile(self.prior_mean.reshape((self.prior_mean.shape[0], 1)), (1, self.n_random_samples))
             data_perturbation = self.random_vector_generator(np.zeros_like(self.data), self.noise_covariance, 1).reshape(self.data.shape)
             prior_perturbation = self.random_vector_generator(np.zeros_like(self.prior_mean), self.prior_covariance, 1).reshape(self.prior_mean.shape)
             results = self.solveRealization(expanded_data + data_perturbation, expanded_prior_mean + prior_perturbation)
