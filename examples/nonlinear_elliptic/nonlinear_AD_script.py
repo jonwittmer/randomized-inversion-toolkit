@@ -114,7 +114,7 @@ targets[:,1] = targets_y
 print( "Number of observation points: {0}".format(ntargets) )
 
 # random number generator with covariance specified
-if strategy == Strategy.RMA: 
+if strategy == Strategy.RMA or strategy == Strategy.RMA_RMAP: 
     misfit = PointwiseStateObservationRandomized(Vh[STATE], targets, n_random_vectors)
 else: # strategy == Strategy.NONE:
     misfit = PointwiseStateObservation(Vh[STATE], targets)
@@ -128,7 +128,7 @@ noise_std_dev = rel_noise * MAX
 parRandom.normal_perturb(noise_std_dev, misfit.d)
 
 # set the random vector generator for randomized misfit class
-if strategy == Strategy.RMA:
+if strategy == Strategy.RMA or strategy == Strategy.RMA_RMAP:
     def random_vector_generator(n_random_vectors, local_size):
         return 1. / (n_random_vectors)**(0.5) * np.random.normal(0, 1. / noise_std_dev, (n_random_vectors, local_size))
     misfit.random_vector_generator = random_vector_generator
