@@ -63,7 +63,7 @@ class IdentityPreconditioner:
         
 class BiLaplacianPriorRand(_Prior):
     """
-    This prior is not scalable to multiple processors as it assembles the full prior inverse covariance matrix (probably)
+    This prior is not scalable to multiple processors as it assembles the full prior inverse covariance matrix
     """
     def __init__(self, Vh, gamma, delta, Theta=None, mean=None, rel_tol=1e-12, max_iter=1000, robin_bc=False, random_vectors=None):
         self.random_vectors = random_vectors

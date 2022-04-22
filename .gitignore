@@ -21,3 +21,4 @@ figures/
 *.mat
 *.fig
 *.tex
+*.o
