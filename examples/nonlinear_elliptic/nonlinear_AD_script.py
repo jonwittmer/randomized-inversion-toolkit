@@ -202,6 +202,7 @@ plt.savefig("figures/observations.png")
 if strategy == Strategy.RMAP or strategy == Strategy.RMA_RMAP or strategy == Strategy.ENKF_U1:
     mean_parameter_solution = 0 
     for n in range(n_random_vectors):
+        print(f'\nSolving {n + 1} / {n_random_vectors}')
         # independent realizations of noisy data
         misfit.d = observations.copy()
         parRandom.normal_perturb(noise_std_dev, misfit.d)
