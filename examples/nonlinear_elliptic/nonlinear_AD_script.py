@@ -19,7 +19,7 @@ logging.getLogger('FFC').setLevel(logging.WARNING)
 logging.getLogger('UFL').setLevel(logging.WARNING)
 dl.set_log_active(False)
 
-np.random.seed(seed=25)
+np.random.seed(seed=50)
 
 # randomization strategy
 class Strategy:
@@ -70,7 +70,7 @@ def solveInstance(pde, prior, misfit):
     solver.parameters["rel_tolerance"] = 1e-6
     solver.parameters["abs_tolerance"] = 1e-12
     solver.parameters["max_iter"] = 25
-    solver.parameters["GN_iter"] = 10
+    solver.parameters["GN_iter"] = 5
     solver.parameters["globalization"] = "LS"
     solver.parameters["LS"]["c_armijo"] = 1e-4
     
@@ -100,15 +100,15 @@ print("Strategy: {}  n_random_vectors: {}".format(strategy, n_random_vectors))
 default_figsize = (7,5)
 my_cmap = cm.make_cmap('../../utils/div2-gray-gold.xml')
 matplotlib.cm.register_cmap(cmap=my_cmap)
-param_vmin = -1.0
-param_vmax = 4
+param_vmin = -2.5
+param_vmax = 1.5
 
 # problem parameters
 ntargets = 100
-rel_noise = 0.001
+rel_noise = 0.01
 ndim = 2
-nx = 32
-ny = 32
+nx = 64
+ny = 64
 mesh = dl.UnitSquareMesh(nx, ny)
 Vh2 = dl.FunctionSpace(mesh, 'Lagrange', 2)
 Vh1 = dl.FunctionSpace(mesh, 'Lagrange', 1)

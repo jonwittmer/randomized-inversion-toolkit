@@ -30,7 +30,21 @@ def computeRelativeError(filename, target_solution):
     # compute the relative error with respect to target_solution
     test_solution = np.load('solutions/' + filename)
     return np.linalg.norm(test_solution - target_solution) / np.linalg.norm(target_solution)
-    
+
+def sortBySamples(result):
+    zipped_results = zip(result['samples'], result['rel_error'])
+    sorted_results = sorted(zipped_results, key=lambda pair: pair[0])
+    result['samples'] = [x for x, _ in sorted_results]
+    result['rel_error'] = [x for _, x in sorted_results]
+    #print(result)
+    #print()
+    return result
+
+def prettyPrint(results):
+    for method in results:
+        print(method, results[method])
+    return
+
 mesh_size = 1089
 u1_solution_filename = 'no_randomization_0_mesh_{}.npy'.format(mesh_size)
 files = os.listdir('solutions')
@@ -52,6 +66,9 @@ for name in split_filenames:
             'samples' : [info['samples']],
             'rel_error' : [info['rel_error']]
         }
+    results[info['method']] = sortBySamples(results[info['method']])
+    prettyPrint(results)
+    print()
 print(results)
 
 writeLatexTables(results, 'nonlinear_elliptic.tex')
