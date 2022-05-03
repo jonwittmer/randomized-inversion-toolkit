@@ -10,8 +10,8 @@ import skimage.data as sk_data
 import skimage.transform as sk_transform
 import matplotlib.pyplot as plt
 
+import src.random_sampling as rand
 from src.randomization_strategies import Strategies
-from src.random_sampling import scaledIdentityCovGenerator
 from utils.generate_tables import writeLatexTables
 from utils.generate_figures import checkDirectory
 from utils.lcurve import computeLCurve
@@ -64,7 +64,7 @@ if __name__ == '__main__':
     image_dimension = 128
     noise_level = 0.01
     regularization = 2500 # we will use identiy prior_covariance, parameterized by scalar given here
-    random_vector_generator = scaledIdentityCovGenerator
+    random_vector_generator = rand.scaledIdentityCovGenerator()
     
     true_parameter = trueParameter(image_dimension)
     observations = generateObservations(true_parameter, n_angles)
@@ -74,7 +74,7 @@ if __name__ == '__main__':
     data = data.reshape((-1,))
     
     solver_type = 'cg'
-    problem_name = 'xray_tomography'
+    problem_name = 'xray_tomography_gaussian'
 
     def strategyBuilder(reg):
         return Strategies.NO_RANDOMIZATION(data, forward_map, 1 / (noise_std**2), 0, reg, random_vector_generator, 0, solver_type)
@@ -88,7 +88,7 @@ if __name__ == '__main__':
     u1_solution = no_randomization_solver.solve().reshape(true_parameter.shape)
     saveSolution(u1_solution, problem_name, 'u1', 0)
     
-    n_random_samples = [10, 1000, 5000]
+    n_random_samples = [10, 100, 1000, 5000]
     test_strategies = [
         Strategies.RMAP,
         Strategies.RMA,
@@ -96,6 +96,9 @@ if __name__ == '__main__':
         Strategies.RS_U1,
         Strategies.RS,
         Strategies.ENKF,
+        Strategies.ENKF_U1,
+        Strategies.RSLS,
+        Strategies.ALL
     ]
     results = {}
     

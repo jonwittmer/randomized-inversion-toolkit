@@ -13,6 +13,8 @@ from hippylib import *
 from randomized_misfit import PointwiseStateObservationRandomized
 from randomized_priors import BiLaplacianPriorRand, fenics_operator_to_numpy
 import utils.colormaps as cm 
+from multiprocessing import Pool
+from itertools import repeat
 
 import logging
 logging.getLogger('FFC').setLevel(logging.WARNING)
@@ -87,6 +89,18 @@ def solveInstance(pde, prior, misfit):
     print( "Final cost: ", solver.final_cost )
     return x
 
+def solveInstanceWithSampling(pde, prior, misfit, observations, noise_level):
+    # independent realizations of noisy data
+    misfit.d = observations.copy()
+    parRandom.normal_perturb(noise_std_dev, misfit.d)
+    
+    prior.mean.zero()
+    sample = priorSample(prior)
+    prior.mean.set_local(sample)
+    
+    instance_solution = solveInstance(pde, prior, misfit)
+    return instance_solution
+        
 # accept command line arguments so we don't have to keep changing script
 parser = argparse.ArgumentParser()
 parser.add_argument('--strategy', help='what type of randomization strategy to use')
@@ -203,15 +217,15 @@ if strategy == Strategy.RMAP or strategy == Strategy.RMA_RMAP or strategy == Str
     mean_parameter_solution = 0 
     for n in range(n_random_vectors):
         print(f'\nSolving {n + 1} / {n_random_vectors}')
-        # independent realizations of noisy data
-        misfit.d = observations.copy()
-        parRandom.normal_perturb(noise_std_dev, misfit.d)
+        # # independent realizations of noisy data
+        # misfit.d = observations.copy()
+        # parRandom.normal_perturb(noise_std_dev, misfit.d)
 
-        prior.mean.zero()
-        sample = priorSample(prior)
-        prior.mean.set_local(sample)
+        # prior.mean.zero()
+        # sample = priorSample(prior)
+        # prior.mean.set_local(sample)
 
-        instance_solution = solveInstance(pde, prior, misfit)
+        instance_solution = solveInstanceWithSampling(pde, prior, misfit, observations, noise_std_dev)
         mean_parameter_solution += instance_solution[PARAMETER].get_local()
     mean_parameter_solution /= n_random_vectors
     solution = instance_solution

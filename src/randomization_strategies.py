@@ -1,19 +1,17 @@
+import os
+import sys
+sys.path.append('../')
 import numpy as np
 import scipy as sp
 import scipy.sparse
 import scipy.sparse.linalg
-from .solvers import Solver, NumpyDirectSolver, CgSolver
+from src.solvers import Solver, NumpyDirectSolver, CgSolver
+from utils.math import isScalar
 
 str_to_solver_mapping = {
     'direct' : NumpyDirectSolver(),
     'cg' : CgSolver()
 }
-
-def isScalar(val):
-    if (val * np.array([1])).size == 1:
-        return True
-    else:
-        return False
 
 class RandomizationStrategy:
     data = None
@@ -44,7 +42,6 @@ class RandomizationStrategy:
         self.noise_covariance = None
         self.prior_covariance = None
         
-
     def getCovarianceFromInverse(self, inv_covariance):
         # this function will not be called if # to avoid calling np.linalg.inv().
         if isScalar(inv_covariance):
@@ -388,6 +385,151 @@ class EnkfStrategy(RandomizationStrategy):
                 results[:, i] = np.reshape(self.solveRealization(perturbed_data[:, i], perturbed_prior_mean[:, i]), (self.parameter_dim,))
         return np.mean(results, axis=1)
 
+class EnkfU1Strategy(RandomizationStrategy):
+    def __init__(self, data, forward_map, inv_noise_covariance, prior_mean, inv_prior_covariance, random_vector_generator, n_random_samples, solver):
+        super().__init__(data, forward_map, inv_noise_covariance, prior_mean, inv_prior_covariance, random_vector_generator, n_random_samples, solver)
+        self.name = 'ENKF\_U1'
+        
+    def formHessian(self):            
+        if isinstance(self.forward_map, sp.sparse.linalg.LinearOperator):
+            def hessianAction(v):
+                # compute (A^T * inv_noise_cov * A + inv_prior_cov) * v
+                temp = self.forward_map @ v
+                temp = self.inv_noise_covariance @ temp
+                temp = self.forward_map.transpose() @ temp
+                return temp + self.projection_vectors @ (self.projection_vectors.T @ v)
+            self.hessian = sp.sparse.linalg.LinearOperator((self.parameter_dim, self.parameter_dim), hessianAction)
+        else:
+            self.hessian = self.forward_map.T @ self.inv_noise_covariance @ self.forward_map + self.projection_vectors @ self.projection_vectors.T
+        
+    def drawRandomVectors(self):
+        self.projection_vectors = self.random_vector_generator(np.zeros_like(self.prior_mean), self.inv_prior_covariance, self.n_random_samples).T
+        self.projection_vectors *= 1 / (self.n_random_samples**0.5)
+
+    def solveRealization(self, perturbed_data, perturbed_prior_mean):
+        rhs = self.inv_noise_covariance @ perturbed_data
+        rhs = self.forward_map.transpose() @ rhs + self.projection_vectors @ (self.projection_vectors.T @ perturbed_prior_mean)
+        return self.solver.solve(self.hessian, rhs)
+        
+    def solve(self):
+        if self.noise_covariance is None:
+            self.noise_covariance = self.getCovarianceFromInverse(self.inv_noise_covariance)
+        if self.prior_covariance is None:
+            self.prior_covariance = self.getCovarianceFromInverse(self.inv_prior_covariance)
+        self.convertCovariancesToMatrices()
+        self.drawRandomVectors()
+        
+        # form hessian if not already formed
+        if self.hessian is None:
+            self.formHessian()
+
+        perturbed_data = np.tile(self.data.reshape((self.data.shape[0], 1)), (1, self.n_random_samples))
+        perturbed_prior_mean = np.tile(self.prior_mean.reshape((self.prior_mean.shape[0], 1)), (1, self.n_random_samples))
+        perturbed_data += self.random_vector_generator(np.zeros_like(self.data), self.noise_covariance, self.n_random_samples).T
+        perturbed_prior_mean += self.random_vector_generator(np.zeros_like(self.prior_mean), self.prior_covariance, self.n_random_samples).T
+        if self.solver.solver_type == 'direct':
+            results = self.solveRealization(perturbed_data, perturbed_prior_mean)
+        else:
+            results = np.zeros((self.parameter_dim, self.n_random_samples))
+            for i in range(self.n_random_samples):
+                results[:, i] = np.reshape(self.solveRealization(perturbed_data[:, i], perturbed_prior_mean[:, i]), (self.parameter_dim,))
+        return np.mean(results, axis=1)
+
+class RsLsStrategy(RandomizationStrategy):
+    def __init__(self, data, forward_map, inv_noise_covariance, prior_mean, inv_prior_covariance, random_vector_generator, n_random_samples, solver):
+        super().__init__(data, forward_map, inv_noise_covariance, prior_mean, inv_prior_covariance, random_vector_generator, n_random_samples, solver)
+        self.name = 'ALL'
+        
+    def formHessian(self):
+        if isinstance(self.forward_map, sp.sparse.linalg.LinearOperator):
+            def hessianAction(v):
+                # compute (A^T * inv_noise_cov * A + inv_prior_cov) * v
+                temp = self.forward_map @ v
+                temp = self.projection_vectors @ (self.projection_vectors.T @ temp)
+                temp = self.forward_map.transpose() @ temp
+                return temp +  self.prior_projection_vectors @ (self.prior_projection_vectors.T @ v)
+            self.hessian = sp.sparse.linalg.LinearOperator((self.parameter_dim, self.parameter_dim), hessianAction)
+        else:
+            self.hessian = self.forward_map.T @ self.projection_vectors @ self.projection_vectors.T @ self.forward_map + \
+                           self.prior_projection_vectors @ self.prior_projection_vectors.T
+        
+    def drawRandomVectors(self):
+        self.projection_vectors = self.random_vector_generator(np.zeros_like(self.data), self.inv_noise_covariance, self.n_random_samples).T
+        self.projection_vectors *= 1 / (self.n_random_samples**0.5)
+        self.prior_projection_vectors = self.random_vector_generator(np.zeros_like(self.prior_mean), self.inv_prior_covariance, self.n_random_samples).T
+        self.prior_projection_vectors *= 1 / (self.n_random_samples**0.5)
+
+    def solve(self):
+        self.convertCovariancesToMatrices()
+        self.drawRandomVectors()
+        
+        # form hessian if not already formed
+        if self.hessian is None:
+            self.formHessian()
+            
+        # form right hand side without storing intermediate matrices (only matvec products)
+        rhs = self.projection_vectors @ (self.projection_vectors.T @ self.data)
+        rhs = self.forward_map.transpose() @ rhs + self.prior_projection_vectors @ (self.prior_projection_vectors.T @ self.prior_mean)
+            
+        return self.solver.solve(self.hessian, rhs)
+    
+class AllRandomizationStrategy(RandomizationStrategy):
+    def __init__(self, data, forward_map, inv_noise_covariance, prior_mean, inv_prior_covariance, random_vector_generator, n_random_samples, solver):
+        super().__init__(data, forward_map, inv_noise_covariance, prior_mean, inv_prior_covariance, random_vector_generator, n_random_samples, solver)
+        self.name = 'ALL'
+        
+    def formHessian(self):
+        if isinstance(self.forward_map, sp.sparse.linalg.LinearOperator):
+            def hessianAction(v):
+                # compute (A^T * inv_noise_cov * A + inv_prior_cov) * v
+                temp = self.forward_map @ v
+                temp = self.projection_vectors @ (self.projection_vectors.T @ temp)
+                temp = self.forward_map.transpose() @ temp
+                return temp +  self.prior_projection_vectors @ (self.prior_projection_vectors.T @ v)
+            self.hessian = sp.sparse.linalg.LinearOperator((self.parameter_dim, self.parameter_dim), hessianAction)
+        else:
+            self.hessian = self.forward_map.T @ self.projection_vectors @ self.projection_vectors.T @ self.forward_map + \
+                           self.prior_projection_vectors @ self.prior_projection_vectors.T
+        
+    def drawRandomVectors(self):
+        self.projection_vectors = self.random_vector_generator(np.zeros_like(self.data), self.inv_noise_covariance, self.n_random_samples).T
+        self.projection_vectors *= 1 / (self.n_random_samples**0.5)
+        self.prior_projection_vectors = self.random_vector_generator(np.zeros_like(self.prior_mean), self.inv_prior_covariance, self.n_random_samples).T
+        self.prior_projection_vectors *= 1 / (self.n_random_samples**0.5)
+        
+    def solveRealization(self, perturbed_data, perturbed_prior_mean):
+        # form hessian if not already formed
+        if self.hessian is None:
+            self.formHessian()
+            
+        # form right hand side without storing intermediate matrices (only matvec products)
+        rhs = self.projection_vectors @ (self.projection_vectors.T @ perturbed_data)
+        rhs = self.forward_map.transpose() @ rhs + self.prior_projection_vectors @ (self.prior_projection_vectors.T @ perturbed_prior_mean)
+            
+        return self.solver.solve(self.hessian, rhs)
+
+    def solve(self):
+        # for sampling, we need the covariances, not the inverses for this method
+        if self.noise_covariance is None:
+            self.noise_covariance = self.getCovarianceFromInverse(self.inv_noise_covariance)
+        if self.prior_covariance is None:
+            self.prior_covariance = self.getCovarianceFromInverse(self.inv_prior_covariance)
+        self.convertCovariancesToMatrices()
+        self.drawRandomVectors()
+
+        # it is much cheaper to draw all samples at once since numpy does an svd every time multivariate_normal is called (usual case)
+        perturbed_data = np.tile(self.data.reshape((self.data.shape[0], 1)), (1, self.n_random_samples))
+        perturbed_prior_mean = np.tile(self.prior_mean.reshape((self.prior_mean.shape[0], 1)), (1, self.n_random_samples))
+        perturbed_data += self.random_vector_generator(np.zeros_like(self.data), self.noise_covariance, self.n_random_samples).T
+        perturbed_prior_mean += self.random_vector_generator(np.zeros_like(self.prior_mean), self.prior_covariance, self.n_random_samples).T
+        if self.solver.solver_type == 'direct':
+            results = self.solveRealization(perturbed_data, perturbed_prior_mean)
+        else:
+            results = np.zeros((self.parameter_dim, self.n_random_samples))
+            for i in range(self.n_random_samples):
+                results[:, i] = np.reshape(self.solveRealization(perturbed_data[:, i], perturbed_prior_mean[:, i]), (self.parameter_dim,))
+        return np.mean(results, axis=1)
+    
 class Strategies:
     NO_RANDOMIZATION = NoRandomizationStrategy
     RMA = LeftSketchingStrategy
@@ -397,3 +539,6 @@ class Strategies:
     RS = RightSketchU2Strategy
     RS_U1 = RightSketchU1Strategy
     ENKF = EnkfStrategy
+    ENKF_U1 = EnkfU1Strategy
+    RSLS = RsLsStrategy
+    ALL = AllRandomizationStrategy

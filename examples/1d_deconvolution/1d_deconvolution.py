@@ -9,7 +9,7 @@ import scipy.ndimage
 import matplotlib.pyplot as plt
 
 from src.randomization_strategies import Strategies
-from src.random_sampling import scaledIdentityCovGenerator
+import src.random_sampling as rand
 from utils.generate_figures import generateFigures
 from utils.generate_tables import writeLatexTables
 
@@ -50,7 +50,6 @@ def buildForwardMatrix(n_observations):
         forward_map[:, i] = np.reshape(unit_action, (n_observations,))
     return forward_map
 
-
 if __name__ == '__main__':
     np.random.seed(20)
 
@@ -58,8 +57,11 @@ if __name__ == '__main__':
     n_observations = 1000
     alpha = 2 * np.pi
     noise_level = 0.05
-    regularization = 20 # we will use identiy prior_covariance, parameterized by scalar given here
-    random_vector_generator = scaledIdentityCovGenerator
+    regularization = 20
+    random_vector_generator = rand.scaledIdentityCovGenerator()
+    # random_vector_generator = rand.achlioptasRandomGenerator()
+    # random_vector_generator = rand.rademacherRandomGenerator()
+    # random_vector_generator = rand.exponentialRandomGenerator()
     
     observation_coords, observations = generateObservations(n_observations, alpha)
     true_parameter = trueParameter(alpha, observation_coords)
@@ -68,8 +70,15 @@ if __name__ == '__main__':
     forward_map = buildForwardMatrix(n_observations)
     
     solver_type = 'direct'
-    problem_name = '1D_Deconvolution'
+    problem_name = '1D_Deconvolution_Gaussian'
 
+    fig, ax = plt.subplots(figsize=(5, 3))
+    ax.plot(observation_coords, true_parameter)
+    ax.set_title("True parameter")
+    fig.tight_layout()
+    plt.savefig(f"figures/{problem_name}/true_parameter.pdf", pad_inches=0, dpi=300)
+    plt.close(fig)
+    
     # generate u1 solution only once
     no_randomizaton_solver = Strategies.NO_RANDOMIZATION(data, forward_map, 1 / (noise_std**2), 0, regularization, random_vector_generator, 0, solver_type)
     u1_solution = no_randomizaton_solver.solve()
@@ -82,15 +91,29 @@ if __name__ == '__main__':
         Strategies.RS_U1,
         Strategies.RS,
         Strategies.ENKF,
+        Strategies.ENKF_U1,
+        Strategies.RSLS,
+        Strategies.ALL
     ]
+
+    # we want to perform fewer CG iterations on these randomization strategies
+    # since the rank of the forward map is at most n_samples
+    ls_strategies = [Strategies.RMA, Strategies.RMA_RMAP, Strategies.ALL]
     results = {}
-    
+
     for curr_strategy in test_strategies:
         rand_solutions = []
         rand_labels = []
         for samples in n_random_samples:
             rand_labels.append(f"N = {samples}")
             randomized_solver = curr_strategy(data, forward_map, 1 / (noise_std**2), 0, regularization, random_vector_generator, samples, solver_type)
+            
+            # don't allow iterative solver to solve past rank of operator
+            if solver_type == 'cg' and curr_strategy in ls_strategies:
+                randomized_solver.solver.maxiter = samples
+            else:
+                # default
+                randomized_solver.solver.maxiter = None
             rand_solutions.append(randomized_solver.solve())
             
             if randomized_solver.name not in results:
