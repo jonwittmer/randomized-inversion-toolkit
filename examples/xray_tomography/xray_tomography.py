@@ -51,11 +51,17 @@ def saveSolution(solution, problem_name, method_name, n_samples):
     fig, ax = plt.subplots(figsize=(3,3))
     ax.imshow(solution, vmin=0, vmax=1, cmap='gray')
     ax.axis('off')
-    fig_name = f'figures/{problem_name}/{method_name}_N{n_samples:04d}.pdf'
+    fig_name = f'figures/{problem_name}/{method_name}_N{n_samples:05d}.pdf'
     checkDirectory(fig_name)
+    print(f'\tsaving figure to {fig_name}\n')
     plt.savefig(fig_name, pad_inches=0, dpi=300)
     plt.close(fig)
 
+    # write raw data to file
+    data_name = f'solutions/{problem_name}/{method_name}_N{n_samples:05d}.pdf'
+    checkDirectory(data_name)
+    np.save(data_name, solution)
+    
 if __name__ == '__main__':
     np.random.seed(20)
     
@@ -78,7 +84,7 @@ if __name__ == '__main__':
 
     def strategyBuilder(reg):
         return Strategies.NO_RANDOMIZATION(data, forward_map, 1 / (noise_std**2), 0, reg, random_vector_generator, 0, solver_type)
-    computeLCurve(true_parameter, strategyBuilder)
+    #computeLCurve(true_parameter, strategyBuilder)
     
     # generate u1 solution only once
     no_randomization_solver = Strategies.NO_RANDOMIZATION(data, forward_map, 1 / (noise_std**2), 0, regularization, random_vector_generator, 0, solver_type)
@@ -96,8 +102,8 @@ if __name__ == '__main__':
         Strategies.RS_U1,
         Strategies.RS,
         Strategies.ENKF,
-        Strategies.ENKF_U1,
         Strategies.RSLS,
+        Strategies.ENKF_U1,
         Strategies.ALL
     ]
     results = {}
@@ -108,18 +114,19 @@ if __name__ == '__main__':
         for samples in n_random_samples:
             rand_labels.append(f"N = {samples}")
             randomized_solver = curr_strategy(data, forward_map, 1 / (noise_std**2), 0, regularization, random_vector_generator, samples, solver_type)
+            print(f'solving with {randomized_solver.name}, N = {samples}')
             randomized_solver.solver.atol = 1e-5
             randomized_solver.solver.tol = 1e-5
-            randomized_solver.solver.maxiter = 2000
+            randomized_solver.solver.maxiter = 500
             rand_solutions.append(randomized_solver.solve().reshape(true_parameter.shape))
             
             if randomized_solver.name not in results:
                 results[randomized_solver.name] = {"samples": [], "rel_error": []}
             results[randomized_solver.name]["samples"].append(samples)
             results[randomized_solver.name]["rel_error"].append(np.linalg.norm(rand_solutions[-1] - u1_solution) / np.linalg.norm(u1_solution))
-            print(f"N = {samples}    error = {results[randomized_solver.name]['rel_error'][-1]}")
+            print(f"\tN = {samples}    error = {results[randomized_solver.name]['rel_error'][-1]}")
 
             saveSolution(rand_solutions[-1], problem_name, randomized_solver.name, samples)
         print()
         
-    writeLatexTables(results, f'{problem_name}_table.tex')
+    #writeLatexTables(results, f'{problem_name}_table.tex')

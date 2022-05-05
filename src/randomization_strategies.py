@@ -196,6 +196,8 @@ class RmapStrategy(RandomizationStrategy):
         else:
             results = np.zeros((self.parameter_dim, self.n_random_samples))
             for i in range(self.n_random_samples):
+                print(f"solving {i+1} / {self.n_random_samples}")
+                sys.stdout.write("\0333[F")
                 results[:, i] = np.reshape(self.solveRealization(perturbed_data[:, i], perturbed_prior_mean[:, i]), (self.parameter_dim,))
         return np.mean(results, axis=1)
 
@@ -251,6 +253,8 @@ class LeftSketchingRmapStrategy(RandomizationStrategy):
         else:
             results = np.zeros((self.parameter_dim, self.n_random_samples))
             for i in range(self.n_random_samples):
+                print(f"solving {i+1} / {self.n_random_samples}")
+                sys.stdout.write("\0333[F")
                 results[:, i] = np.reshape(self.solveRealization(perturbed_data[:, i], perturbed_prior_mean[:, i]), (self.parameter_dim,))
         return np.mean(results, axis=1)
     
@@ -382,6 +386,8 @@ class EnkfStrategy(RandomizationStrategy):
         else:
             results = np.zeros((self.parameter_dim, self.n_random_samples))
             for i in range(self.n_random_samples):
+                print(f"solving {i+1} / {self.n_random_samples}")
+                sys.stdout.write("\0333[F")
                 results[:, i] = np.reshape(self.solveRealization(perturbed_data[:, i], perturbed_prior_mean[:, i]), (self.parameter_dim,))
         return np.mean(results, axis=1)
 
@@ -432,13 +438,15 @@ class EnkfU1Strategy(RandomizationStrategy):
         else:
             results = np.zeros((self.parameter_dim, self.n_random_samples))
             for i in range(self.n_random_samples):
+                print(f"solving {i+1} / {self.n_random_samples}")
+                sys.stdout.write("\0333[F")
                 results[:, i] = np.reshape(self.solveRealization(perturbed_data[:, i], perturbed_prior_mean[:, i]), (self.parameter_dim,))
         return np.mean(results, axis=1)
 
 class RsLsStrategy(RandomizationStrategy):
     def __init__(self, data, forward_map, inv_noise_covariance, prior_mean, inv_prior_covariance, random_vector_generator, n_random_samples, solver):
         super().__init__(data, forward_map, inv_noise_covariance, prior_mean, inv_prior_covariance, random_vector_generator, n_random_samples, solver)
-        self.name = 'ALL'
+        self.name = 'RSLS'
         
     def formHessian(self):
         if isinstance(self.forward_map, sp.sparse.linalg.LinearOperator):
@@ -527,6 +535,8 @@ class AllRandomizationStrategy(RandomizationStrategy):
         else:
             results = np.zeros((self.parameter_dim, self.n_random_samples))
             for i in range(self.n_random_samples):
+                print(f"solving {i+1} / {self.n_random_samples}")
+                sys.stdout.write("\0333[F")
                 results[:, i] = np.reshape(self.solveRealization(perturbed_data[:, i], perturbed_prior_mean[:, i]), (self.parameter_dim,))
         return np.mean(results, axis=1)
     

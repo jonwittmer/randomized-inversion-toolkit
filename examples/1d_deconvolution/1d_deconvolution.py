@@ -85,15 +85,15 @@ if __name__ == '__main__':
     
     n_random_samples = [10, 100, 1000, 10000]
     test_strategies = [
-        Strategies.RMAP,
-        Strategies.RMA,
-        Strategies.RMA_RMAP,
-        Strategies.RS_U1,
-        Strategies.RS,
-        Strategies.ENKF,
-        Strategies.ENKF_U1,
+        # Strategies.RMAP,
+        # Strategies.RMA,
+        # Strategies.RMA_RMAP,
+        # Strategies.RS_U1,
+        # Strategies.RS,
+        # Strategies.ENKF,
+        # Strategies.ENKF_U1,
         Strategies.RSLS,
-        Strategies.ALL
+        #Strategies.ALL
     ]
 
     # we want to perform fewer CG iterations on these randomization strategies
@@ -107,6 +107,7 @@ if __name__ == '__main__':
         for samples in n_random_samples:
             rand_labels.append(f"N = {samples}")
             randomized_solver = curr_strategy(data, forward_map, 1 / (noise_std**2), 0, regularization, random_vector_generator, samples, solver_type)
+            print(f'solving with {randomized_solver.name}')
             
             # don't allow iterative solver to solve past rank of operator
             if solver_type == 'cg' and curr_strategy in ls_strategies:
@@ -120,7 +121,8 @@ if __name__ == '__main__':
                 results[randomized_solver.name] = {"samples": [], "rel_error": []}
             results[randomized_solver.name]["samples"].append(samples)
             results[randomized_solver.name]["rel_error"].append(np.linalg.norm(rand_solutions[-1] - u1_solution) / np.linalg.norm(u1_solution))
-            print(f"N = {samples}    error = {results[randomized_solver.name]['rel_error'][-1]}")
+            print(f"\tN = {samples}    error = {results[randomized_solver.name]['rel_error'][-1]}")
+            
         print()
         generateFigures(observation_coords, u1_solution, rand_solutions, rand_labels,
                         f"figures/{problem_name}/{randomized_solver.name}.pdf", lims={"ylim": [-1.75, 1.75]})
