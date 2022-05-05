@@ -197,7 +197,7 @@ class RmapStrategy(RandomizationStrategy):
             results = np.zeros((self.parameter_dim, self.n_random_samples))
             for i in range(self.n_random_samples):
                 print(f"solving {i+1} / {self.n_random_samples}")
-                sys.stdout.write("\0333[F")
+                sys.stdout.write("\033[F")
                 results[:, i] = np.reshape(self.solveRealization(perturbed_data[:, i], perturbed_prior_mean[:, i]), (self.parameter_dim,))
         return np.mean(results, axis=1)
 
@@ -254,7 +254,7 @@ class LeftSketchingRmapStrategy(RandomizationStrategy):
             results = np.zeros((self.parameter_dim, self.n_random_samples))
             for i in range(self.n_random_samples):
                 print(f"solving {i+1} / {self.n_random_samples}")
-                sys.stdout.write("\0333[F")
+                sys.stdout.write("\033[F")
                 results[:, i] = np.reshape(self.solveRealization(perturbed_data[:, i], perturbed_prior_mean[:, i]), (self.parameter_dim,))
         return np.mean(results, axis=1)
     
@@ -387,7 +387,7 @@ class EnkfStrategy(RandomizationStrategy):
             results = np.zeros((self.parameter_dim, self.n_random_samples))
             for i in range(self.n_random_samples):
                 print(f"solving {i+1} / {self.n_random_samples}")
-                sys.stdout.write("\0333[F")
+                sys.stdout.write("\033[F")
                 results[:, i] = np.reshape(self.solveRealization(perturbed_data[:, i], perturbed_prior_mean[:, i]), (self.parameter_dim,))
         return np.mean(results, axis=1)
 
@@ -439,7 +439,7 @@ class EnkfU1Strategy(RandomizationStrategy):
             results = np.zeros((self.parameter_dim, self.n_random_samples))
             for i in range(self.n_random_samples):
                 print(f"solving {i+1} / {self.n_random_samples}")
-                sys.stdout.write("\0333[F")
+                sys.stdout.write("\033[F")
                 results[:, i] = np.reshape(self.solveRealization(perturbed_data[:, i], perturbed_prior_mean[:, i]), (self.parameter_dim,))
         return np.mean(results, axis=1)
 
@@ -536,7 +536,7 @@ class AllRandomizationStrategy(RandomizationStrategy):
             results = np.zeros((self.parameter_dim, self.n_random_samples))
             for i in range(self.n_random_samples):
                 print(f"solving {i+1} / {self.n_random_samples}")
-                sys.stdout.write("\0333[F")
+                sys.stdout.write("\033[F")
                 results[:, i] = np.reshape(self.solveRealization(perturbed_data[:, i], perturbed_prior_mean[:, i]), (self.parameter_dim,))
         return np.mean(results, axis=1)
     
