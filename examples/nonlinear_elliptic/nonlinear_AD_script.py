@@ -31,12 +31,33 @@ class Strategy:
     RMA_RMAP = "rma_rmap"
     RS_U1 = "rs"
     ENKF_U1 = "enkf"
+    ALL = "all"
+
+sketch_pto_list = [
+    Strategy.RMA,
+    Strategy.RMA_RMAP,
+    Strategy.ALL
+]
     
+sketch_prior_list = [
+    Strategy.RS_U1,
+    Strategy.ENKF_U1,
+    Strategy.ALL
+]
+
+mean_sample_list = [
+    Strategy.RMAP,
+    Strategy.RMA_RMAP,
+    Strategy.ENKF_U1,
+    Strategy.ALL
+]
+
 # generate true parameter by drawing from prior
-def priorSample(prior):
+def priorSample(prior, seed=None):
     noise = dl.Vector()
     prior.init_vector(noise, "noise")
-    seed = 25
+    if seed is None:
+        seed = np.random.randint(0, 100)
     parRandom = Random(dl.MPI.rank(dl.MPI.comm_world), dl.MPI.size(dl.MPI.comm_world), seed)
     parRandom.normal(1., noise)
     mtrue = dl.Vector()
@@ -142,32 +163,6 @@ def pde_varf(u,m,p):
     return ufl.exp(m)*ufl.inner(ufl.grad(u), ufl.grad(p))*ufl.dx - f*p*ufl.dx
 pde = PDEVariationalProblem(Vh, pde_varf, bc, bc0, is_fwd_linear=True)
 
-# set up prior
-gamma = 0.1
-delta = 0.5
-theta0 = 2.
-theta1 = .5
-alpha  = np.pi/4
-anis_diff = dl.CompiledExpression(ExpressionModule.AnisTensor2D(), degree=1)
-anis_diff.set(theta0, theta1, alpha)
-if strategy == Strategy.RS_U1 or strategy == Strategy.ENKF_U1:
-    local_size = Vh[PARAMETER].dim()
-    random_vectors = 1. / (n_random_vectors)**(0.5) * np.random.normal(0, 1.0, (n_random_vectors, local_size))
-    prior = BiLaplacianPriorRand(Vh[PARAMETER], gamma, delta, anis_diff, robin_bc=True, random_vectors=random_vectors)
-else:
-    prior = BiLaplacianPrior(Vh[PARAMETER], gamma, delta, anis_diff, robin_bc=True)
-print("Prior regularization: (delta_x - gamma*Laplacian)^order: delta={0}, gamma={1}, order={2}".format(delta, gamma, 2))
-
-# generate true parameter as sample from prior
-mtrue = priorSample(prior)
-true_sol = mtrue.copy()
-objs = dl.Function(Vh[PARAMETER], mtrue)
-mytitle = "True Parameter"
-fig = plt.figure(figsize=default_figsize)
-nb.plot(objs, mytitle=mytitle, cmap=my_cmap, vmin=param_vmin, vmax=param_vmax)
-fig.tight_layout()
-plt.savefig('figures/true_parameter.png')
-
 # observations only on the boundary
 targets_x = np.random.uniform(0.1, 0.9, [ntargets] )
 targets_y = np.random.uniform(0.0, 0.5, [ntargets] )
@@ -176,8 +171,35 @@ targets[:,0] = targets_x
 targets[:,1] = targets_y
 print("Number of observation points: {0}".format(ntargets))
 
+# set up prior
+gamma = 0.1
+delta = 0.5
+theta0 = 2.
+theta1 = .5
+alpha  = np.pi/4
+anis_diff = dl.CompiledExpression(ExpressionModule.AnisTensor2D(), degree=1)
+anis_diff.set(theta0, theta1, alpha)
+if strategy in sketch_prior_list:
+    local_size = Vh[PARAMETER].dim()
+    random_vectors = 1. / (n_random_vectors)**(0.5) * np.random.normal(0, 1.0, (n_random_vectors, local_size))
+    prior = BiLaplacianPriorRand(Vh[PARAMETER], gamma, delta, anis_diff, robin_bc=True, random_vectors=random_vectors)
+else:
+    prior = BiLaplacianPrior(Vh[PARAMETER], gamma, delta, anis_diff, robin_bc=True)
+print("Prior regularization: (delta_x - gamma*Laplacian)^order: delta={0}, gamma={1}, order={2}".format(delta, gamma, 2))
+
+# generate true parameter as sample from prior
+seed=25
+mtrue = priorSample(prior, seed)
+true_sol = mtrue.copy()
+objs = dl.Function(Vh[PARAMETER], mtrue)
+mytitle = "True Parameter"
+fig = plt.figure(figsize=default_figsize)
+nb.plot(objs, mytitle=mytitle, cmap=my_cmap, vmin=param_vmin, vmax=param_vmax)
+fig.tight_layout()
+plt.savefig('figures/true_parameter.png')
+
 # misfit: || d - Bu ||^2 with observations d at targets
-if strategy == Strategy.RMA or strategy == Strategy.RMA_RMAP: 
+if strategy in sketch_pto_list:
     misfit = PointwiseStateObservationRandomized(Vh[STATE], targets, n_random_vectors)
 else:
     misfit = PointwiseStateObservation(Vh[STATE], targets)
@@ -193,7 +215,7 @@ noise_std_dev = rel_noise * MAX
 parRandom.normal_perturb(noise_std_dev, misfit.d)
 
 # set the random vector generator for randomized misfit class
-if strategy == Strategy.RMA or strategy == Strategy.RMA_RMAP:
+if strategy in sketch_pto_list:
     def random_vector_generator(n_random_vectors, local_size):
         return 1. / (n_random_vectors)**(0.5) * np.random.normal(0, 1. / noise_std_dev, (n_random_vectors, local_size))
     misfit.random_vector_generator = random_vector_generator
@@ -213,18 +235,10 @@ nb.plot_pts(targets, misfit.d, mytitle="Observations", vmin=vmin, vmax=vmax, cma
 fig.tight_layout()
 plt.savefig("figures/observations.png")
 
-if strategy == Strategy.RMAP or strategy == Strategy.RMA_RMAP or strategy == Strategy.ENKF_U1:
+if strategy in mean_sample_list:
     mean_parameter_solution = 0 
     for n in range(n_random_vectors):
         print(f'\nSolving {n + 1} / {n_random_vectors}')
-        # # independent realizations of noisy data
-        # misfit.d = observations.copy()
-        # parRandom.normal_perturb(noise_std_dev, misfit.d)
-
-        # prior.mean.zero()
-        # sample = priorSample(prior)
-        # prior.mean.set_local(sample)
-
         instance_solution = solveInstanceWithSampling(pde, prior, misfit, observations, noise_std_dev)
         mean_parameter_solution += instance_solution[PARAMETER].get_local()
     mean_parameter_solution /= n_random_vectors
