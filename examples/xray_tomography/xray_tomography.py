@@ -9,6 +9,7 @@ import scipy.sparse.linalg as sp_sparse
 import skimage.data as sk_data
 import skimage.transform as sk_transform
 import matplotlib.pyplot as plt
+import multiprocessing as mult_proc
 
 import src.random_sampling as rand
 from src.randomization_strategies import Strategies
@@ -25,6 +26,28 @@ def generateObservations(true_parameter, n_observations):
     projection_angles = np.linspace(0, 180, n_observations)
     sinogram = sk_transform.radon(true_parameter, projection_angles, circle=False)
     return sinogram
+
+_func = None
+def bounce_init(func):
+    global _func
+    _func = func
+def bounce(x):
+    return _func(x)
+
+def buildMat(linear_operator):
+    mat = np.zeros(linear_operator.shape)
+    def f(i):
+        if (i % 100) == 0:
+            print(i)
+        e = np.zeros((linear_operator.shape[1],))
+        e[i] = 1
+        return linear_operator @ e
+    
+    with mult_proc.Pool(initializer=bounce_init, initargs=(f ,)) as pool:
+        results = pool.map(bounce, range(linear_operator.shape[1]))
+        for i in range(linear_operator.shape[1]):
+            mat[:, i] = results[i]
+    return mat
 
 def buildForwardOperator(parameter_shape, observation_shape):
     projection_angles = np.linspace(0, 180, observation_shape[1])
@@ -45,7 +68,19 @@ def buildForwardOperator(parameter_shape, observation_shape):
 
     operator_shape = (observation_shape[0] * observation_shape[1], parameter_shape[0] * parameter_shape[1])
     forward_map = sp_sparse.LinearOperator(operator_shape, matvec=radon_flat_image_only, rmatvec=iradon_flat_sinogram_only)
+    forward_map = buildMat(forward_map)
     return forward_map
+
+def plotSpectrum(linear_operator):    
+    # SVD
+    print("performing SVD")
+    u, evals, vh = np.linalg.svd(mat)
+    
+    fig, ax = plt.subplots(figsize=(3,5))
+    ax.semilogy(evals, range(evals.shape[0]))
+    ax.set_xlabel("singular value index")
+    ax.set_ylabel("singular value")
+    plt.savefig("spectrum.pdf", pad_inches=0, dpi=300)
 
 def saveSolution(solution, problem_name, method_name, n_samples):
     fig, ax = plt.subplots(figsize=(3,3))
@@ -67,7 +102,7 @@ if __name__ == '__main__':
     
     # problem setup
     n_angles = 45
-    image_dimension = 128
+    image_dimension = 64
     noise_level = 0.01
     regularization = 2500 # we will use identiy prior_covariance, parameterized by scalar given here
     random_vector_generator = rand.scaledIdentityCovGenerator()
@@ -82,6 +117,8 @@ if __name__ == '__main__':
     solver_type = 'cg'
     problem_name = 'xray_tomography_gaussian'
 
+    #plotSpectrum(forward_map)
+    
     def strategyBuilder(reg):
         return Strategies.NO_RANDOMIZATION(data, forward_map, 1 / (noise_std**2), 0, reg, random_vector_generator, 0, solver_type)
     #computeLCurve(true_parameter, strategyBuilder)
@@ -99,11 +136,11 @@ if __name__ == '__main__':
         Strategies.RMAP,
         Strategies.RMA,
         Strategies.RMA_RMAP,
-        Strategies.RS_U1,
+        #Strategies.RS_U1,
         Strategies.RS,
         Strategies.ENKF,
-        Strategies.RSLS,
-        Strategies.ENKF_U1,
+        #Strategies.RSLS,
+        #Strategies.ENKF_U1,
         Strategies.ALL
     ]
     results = {}
@@ -117,7 +154,7 @@ if __name__ == '__main__':
             print(f'solving with {randomized_solver.name}, N = {samples}')
             randomized_solver.solver.atol = 1e-5
             randomized_solver.solver.tol = 1e-5
-            randomized_solver.solver.maxiter = 500
+            randomized_solver.solver.maxiter = 2000
             rand_solutions.append(randomized_solver.solve().reshape(true_parameter.shape))
             
             if randomized_solver.name not in results:
