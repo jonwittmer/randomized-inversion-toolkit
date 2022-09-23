@@ -2,6 +2,7 @@ import os
 import sys
 sys.path.append('../')
 import numpy as np
+import multiprocessing as mult_proc
 import scipy as sp
 import scipy.sparse
 import scipy.sparse.linalg
@@ -12,6 +13,13 @@ str_to_solver_mapping = {
     'direct' : NumpyDirectSolver(),
     'cg' : CgSolver()
 }
+
+_func = None
+def bounce_init(func):
+    global _func
+    _func = func
+def bounce(x):
+    return _func(*x)
 
 class RandomizationStrategy:
     data = None
@@ -149,7 +157,6 @@ class LeftSketchingStrategy(RandomizationStrategy):
         rhs = self.forward_map.transpose() @ rhs + self.inv_prior_covariance @ self.prior_mean
             
         return self.solver.solve(self.hessian, rhs)
-
     
 class RmapStrategy(RandomizationStrategy):
     def __init__(self, data, forward_map, inv_noise_covariance, prior_mean, inv_prior_covariance, random_vector_generator, n_random_samples, solver):
@@ -168,7 +175,9 @@ class RmapStrategy(RandomizationStrategy):
         else:
             self.hessian = self.forward_map.T @ self.inv_noise_covariance @ self.forward_map + self.inv_prior_covariance
 
-    def solveRealization(self, pertubed_data, perturbed_prior_mean):
+    def solveRealizationParallel(self, pertubed_data, perturbed_prior_mean, i):
+        print(f"solving {i+1} / {self.n_random_samples}")
+        sys.stdout.write("\033[F")
         # form hessian if not already formed
         if self.hessian is None:
             self.formHessian()
@@ -176,7 +185,15 @@ class RmapStrategy(RandomizationStrategy):
         # form right hand side without storing intermediate matrices (only matvec products)
         rhs = self.inv_noise_covariance @ pertubed_data
         rhs = self.forward_map.transpose() @ rhs + self.inv_prior_covariance @ perturbed_prior_mean
-            
+
+        self.results[:, i] = np.reshape(self.solver.solve(self.hessian, rhs), (self.parameter_dim,))
+        return
+    
+    def solveRealization(self, pertubed_data, perturbed_prior_mean):          
+        # form right hand side without storing intermediate matrices (only matvec products)
+        rhs = self.inv_noise_covariance @ pertubed_data
+        rhs = self.forward_map.transpose() @ rhs + self.inv_prior_covariance @ perturbed_prior_mean
+
         return self.solver.solve(self.hessian, rhs)
         
     def solve(self):
@@ -193,13 +210,37 @@ class RmapStrategy(RandomizationStrategy):
         perturbed_prior_mean += self.random_vector_generator(np.zeros_like(self.prior_mean), self.prior_covariance, self.n_random_samples).T
         if self.solver.solver_type == 'direct':
             results = self.solveRealization(perturbed_data, perturbed_prior_mean)
-        else:
-            results = np.zeros((self.parameter_dim, self.n_random_samples))
-            for i in range(self.n_random_samples):
+            results = np.mean(results, axis=1)
+        else:            
+            # form hessian if not already formed
+            if self.hessian is None:
+                self.formHessian()
+
+            # some dumb stuff to get around python's garbage pickling since it doesn't have pointers. I miss C++.
+            inv_noise_covariance = self.inv_noise_covariance
+            forward_map = self.forward_map
+            inv_prior_covariance = self.inv_prior_covariance
+            hessian = self.hessian
+            parameter_dim = self.parameter_dim
+            def solveRealizationParallel(solver, pertubed_data_local, perturbed_prior_mean_local, i):
                 print(f"solving {i+1} / {self.n_random_samples}")
-                sys.stdout.write("\033[F")
-                results[:, i] = np.reshape(self.solveRealization(perturbed_data[:, i], perturbed_prior_mean[:, i]), (self.parameter_dim,))
-        return np.mean(results, axis=1)
+            
+                # form right hand side without storing intermediate matrices (only matvec products)
+                rhs = inv_noise_covariance @ pertubed_data_local
+                rhs = forward_map.transpose() @ rhs + inv_prior_covariance @ perturbed_prior_mean_local
+
+                return np.reshape(solver.solve(hessian, rhs), (parameter_dim,))
+            _func = solveRealizationParallel
+            # solve in parallel
+            with mult_proc.Pool(processes=mult_proc.cpu_count(), initializer=bounce_init, initargs=(solveRealizationParallel,)) as pool:
+                results = np.zeros((self.parameter_dim, self.n_random_samples))
+                scenarios = [(self.solver, perturbed_data[:, i], perturbed_prior_mean[:, i], i) for i in range(self.n_random_samples)]
+                results_list = pool.map(bounce, scenarios)
+                results = 0
+                for res in results_list:
+                    results += res
+                results = results / self.n_random_samples
+        return results
 
 
 class LeftSketchingRmapStrategy(RandomizationStrategy):
@@ -250,13 +291,37 @@ class LeftSketchingRmapStrategy(RandomizationStrategy):
         perturbed_prior_mean += self.random_vector_generator(np.zeros_like(self.prior_mean), self.prior_covariance, self.n_random_samples).T
         if self.solver.solver_type == 'direct':
             results = self.solveRealization(perturbed_data, perturbed_prior_mean)
+            results = np.mean(results, axis=1)
         else:
-            results = np.zeros((self.parameter_dim, self.n_random_samples))
-            for i in range(self.n_random_samples):
+            if self.hessian is None:
+                self.formHessian()
+                
+            # some dumb stuff to get around python's garbage pickling since it doesn't have pointers. I miss C++.
+            inv_noise_covariance = self.inv_noise_covariance
+            forward_map = self.forward_map
+            inv_prior_covariance = self.inv_prior_covariance
+            hessian = self.hessian
+            parameter_dim = self.parameter_dim
+            projection_vectors = self.projection_vectors
+            def solveRealizationParallel(solver, perturbed_data_local, perturbed_prior_mean_local, i):
                 print(f"solving {i+1} / {self.n_random_samples}")
-                sys.stdout.write("\033[F")
-                results[:, i] = np.reshape(self.solveRealization(perturbed_data[:, i], perturbed_prior_mean[:, i]), (self.parameter_dim,))
-        return np.mean(results, axis=1)
+            
+                # form right hand side without storing intermediate matrices (only matvec products)
+                rhs = projection_vectors @ (projection_vectors.T @ perturbed_data_local)
+                rhs = forward_map.transpose() @ rhs + inv_prior_covariance @ perturbed_prior_mean_local
+
+                return np.reshape(solver.solve(hessian, rhs), (parameter_dim,))
+            _func = solveRealizationParallel
+            # solve in parallel
+            with mult_proc.Pool(processes=mult_proc.cpu_count(), initializer=bounce_init, initargs=(solveRealizationParallel,)) as pool:
+                results = np.zeros((self.parameter_dim, self.n_random_samples))
+                scenarios = [(self.solver, perturbed_data[:, i], perturbed_prior_mean[:, i], i) for i in range(self.n_random_samples)]
+                results_list = pool.map(bounce, scenarios)
+                results = 0
+                for res in results_list:
+                    results += res
+                results = results / self.n_random_samples
+        return results
     
     
 class RightSketchU1Strategy(RandomizationStrategy):
@@ -383,13 +448,37 @@ class EnkfStrategy(RandomizationStrategy):
         perturbed_prior_mean += self.random_vector_generator(np.zeros_like(self.prior_mean), self.prior_covariance, self.n_random_samples).T
         if self.solver.solver_type == 'direct':
             results = self.solveRealization(perturbed_data, perturbed_prior_mean)
+            results = np.mean(results, axis=1)
         else:
-            results = np.zeros((self.parameter_dim, self.n_random_samples))
-            for i in range(self.n_random_samples):
+            if self.innovation is None:
+                self.formInnovation()
+                
+            # some dumb stuff to get around python's garbage pickling since it doesn't have pointers. I miss C++.
+            inv_noise_covariance = self.inv_noise_covariance
+            forward_map = self.forward_map
+            inv_prior_covariance = self.inv_prior_covariance
+            innovation = self.innovation
+            parameter_dim = self.parameter_dim
+            projection_vectors = self.projection_vectors
+            def solveRealizationParallel(solver, perturbed_data, perturbed_prior_mean, i):
                 print(f"solving {i+1} / {self.n_random_samples}")
-                sys.stdout.write("\033[F")
-                results[:, i] = np.reshape(self.solveRealization(perturbed_data[:, i], perturbed_prior_mean[:, i]), (self.parameter_dim,))
-        return np.mean(results, axis=1)
+
+                rhs = perturbed_data - forward_map @ perturbed_prior_mean
+                temp = solver.solve(innovation, rhs)
+                temp = perturbed_prior_mean +  projection_vectors @ (projection_vectors.T @ (forward_map.transpose() @ temp))
+                return np.reshape(temp, (parameter_dim,))
+                
+            _func = solveRealizationParallel
+            # solve in parallel
+            with mult_proc.Pool(processes=mult_proc.cpu_count(), initializer=bounce_init, initargs=(solveRealizationParallel,)) as pool:
+                results = np.zeros((self.parameter_dim, self.n_random_samples))
+                scenarios = [(self.solver, perturbed_data[:, i], perturbed_prior_mean[:, i], i) for i in range(self.n_random_samples)]
+                results_list = pool.map(bounce, scenarios)
+                results = 0
+                for res in results_list:
+                    results += res
+                results = results / self.n_random_samples
+        return results
 
 class EnkfU1Strategy(RandomizationStrategy):
     def __init__(self, data, forward_map, inv_noise_covariance, prior_mean, inv_prior_covariance, random_vector_generator, n_random_samples, solver):
@@ -532,13 +621,39 @@ class AllRandomizationStrategy(RandomizationStrategy):
         perturbed_prior_mean += self.random_vector_generator(np.zeros_like(self.prior_mean), self.prior_covariance, self.n_random_samples).T
         if self.solver.solver_type == 'direct':
             results = self.solveRealization(perturbed_data, perturbed_prior_mean)
+            results = np.mean(results, axis=1)
         else:
-            results = np.zeros((self.parameter_dim, self.n_random_samples))
-            for i in range(self.n_random_samples):
+            if self.hessian is None:
+                self.formHessian()
+                
+            # some dumb stuff to get around python's garbage pickling since it doesn't have pointers. I miss C++.
+            inv_noise_covariance = self.inv_noise_covariance
+            forward_map = self.forward_map
+            inv_prior_covariance = self.inv_prior_covariance
+            hessian = self.hessian
+            parameter_dim = self.parameter_dim
+            prior_projection_vectors = self.prior_projection_vectors
+            projection_vectors = self.projection_vectors
+            def solveRealizationParallel(solver, perturbed_data, perturbed_prior_mean, i):
                 print(f"solving {i+1} / {self.n_random_samples}")
-                sys.stdout.write("\033[F")
-                results[:, i] = np.reshape(self.solveRealization(perturbed_data[:, i], perturbed_prior_mean[:, i]), (self.parameter_dim,))
-        return np.mean(results, axis=1)
+
+                rhs = projection_vectors @ (projection_vectors.T @ perturbed_data)
+                rhs = forward_map.transpose() @ rhs + prior_projection_vectors @ (prior_projection_vectors.T @ perturbed_prior_mean)
+                temp = solver.solve(hessian, rhs)
+
+                return np.reshape(temp, (parameter_dim,))
+                
+            _func = solveRealizationParallel
+            # solve in parallel
+            with mult_proc.Pool(processes=mult_proc.cpu_count(), initializer=bounce_init, initargs=(solveRealizationParallel,)) as pool:
+                results = np.zeros((self.parameter_dim, self.n_random_samples))
+                scenarios = [(self.solver, perturbed_data[:, i], perturbed_prior_mean[:, i], i) for i in range(self.n_random_samples)]
+                results_list = pool.map(bounce, scenarios)
+                results = 0
+                for res in results_list:
+                    results += res
+                results = results / self.n_random_samples
+        return results
     
 class Strategies:
     NO_RANDOMIZATION = NoRandomizationStrategy
