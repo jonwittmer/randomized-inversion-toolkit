@@ -68,7 +68,7 @@ def buildForwardOperator(parameter_shape, observation_shape):
 
     operator_shape = (observation_shape[0] * observation_shape[1], parameter_shape[0] * parameter_shape[1])
     forward_map = sp_sparse.LinearOperator(operator_shape, matvec=radon_flat_image_only, rmatvec=iradon_flat_sinogram_only)
-    forward_map = buildMat(forward_map)
+    #forward_map = buildMat(forward_map)
     return forward_map
 
 def plotSpectrum(linear_operator):    
@@ -106,6 +106,7 @@ if __name__ == '__main__':
     noise_level = 0.01
     regularization = 2500 # we will use identiy prior_covariance, parameterized by scalar given here
     random_vector_generator = rand.scaledIdentityCovGenerator()
+    #random_vector_generator = lambda mean, cov, samples : regularization**0.5 * np.eye(mean.shape[0])  
     
     true_parameter = trueParameter(image_dimension)
     observations = generateObservations(true_parameter, n_angles)
@@ -125,23 +126,23 @@ if __name__ == '__main__':
     
     # generate u1 solution only once
     no_randomization_solver = Strategies.NO_RANDOMIZATION(data, forward_map, 1 / (noise_std**2), 0, regularization, random_vector_generator, 0, solver_type)
-    no_randomization_solver.solver.atol = 1e-5
-    no_randomization_solver.solver.tol = 1e-5
-    no_randomization_solver.solver.maxiter = 2000
+    no_randomization_solver.solver.atol = 1e-7
+    no_randomization_solver.solver.tol = 1e-7
+    no_randomization_solver.solver.maxiter = 500
     u1_solution = no_randomization_solver.solve().reshape(true_parameter.shape)
     saveSolution(u1_solution, problem_name, 'u1', 0)
     
-    n_random_samples = [10, 100, 1000, 5000]
+    n_random_samples = [1000]#[10, 100, 500, 1000, 5000, 10000]
     test_strategies = [
-        Strategies.RMAP,
-        Strategies.RMA,
-        Strategies.RMA_RMAP,
-        #Strategies.RS_U1,
-        Strategies.RS,
+        #Strategies.RMAP,
+        #Strategies.RMA,
+        #Strategies.RMA_RMAP,
+        Strategies.RS_U1,
+        #Strategies.RS,
         Strategies.ENKF,
         #Strategies.RSLS,
         #Strategies.ENKF_U1,
-        Strategies.ALL
+        #Strategies.ALL
     ]
     results = {}
     
@@ -152,9 +153,9 @@ if __name__ == '__main__':
             rand_labels.append(f"N = {samples}")
             randomized_solver = curr_strategy(data, forward_map, 1 / (noise_std**2), 0, regularization, random_vector_generator, samples, solver_type)
             print(f'solving with {randomized_solver.name}, N = {samples}')
-            randomized_solver.solver.atol = 1e-5
-            randomized_solver.solver.tol = 1e-5
-            randomized_solver.solver.maxiter = 2000
+            randomized_solver.solver.atol = 1e-7
+            randomized_solver.solver.tol = 1e-7
+            randomized_solver.solver.maxiter = 500
             rand_solutions.append(randomized_solver.solve().reshape(true_parameter.shape))
             
             if randomized_solver.name not in results:

@@ -31,7 +31,7 @@ def setCovarianceOfSamples(samples, cov, vector_shape):
 
 def scaledIdentityCovGenerator():
     def generator(mean, cov, n_random_vectors):
-        vecs = np.random.normal(0, cov[0, 0], (mean.shape[0], n_random_vectors)) + mean[:, np.newaxis]
+        vecs = np.random.normal(0, cov[0, 0]**0.5, (mean.shape[0], n_random_vectors)) + mean[:, np.newaxis]
         return vecs.T
     return generator
 

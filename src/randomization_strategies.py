@@ -232,7 +232,8 @@ class RmapStrategy(RandomizationStrategy):
                 return np.reshape(solver.solve(hessian, rhs), (parameter_dim,))
             _func = solveRealizationParallel
             # solve in parallel
-            with mult_proc.Pool(processes=mult_proc.cpu_count(), initializer=bounce_init, initargs=(solveRealizationParallel,)) as pool:
+            with mult_proc.Pool(processes=min(mult_proc.cpu_count(), 50),
+                                initializer=bounce_init, initargs=(solveRealizationParallel,)) as pool:
                 results = np.zeros((self.parameter_dim, self.n_random_samples))
                 scenarios = [(self.solver, perturbed_data[:, i], perturbed_prior_mean[:, i], i) for i in range(self.n_random_samples)]
                 results_list = pool.map(bounce, scenarios)
@@ -313,7 +314,7 @@ class LeftSketchingRmapStrategy(RandomizationStrategy):
                 return np.reshape(solver.solve(hessian, rhs), (parameter_dim,))
             _func = solveRealizationParallel
             # solve in parallel
-            with mult_proc.Pool(processes=mult_proc.cpu_count(), initializer=bounce_init, initargs=(solveRealizationParallel,)) as pool:
+            with mult_proc.Pool(processes=50, initializer=bounce_init, initargs=(solveRealizationParallel,)) as pool:
                 results = np.zeros((self.parameter_dim, self.n_random_samples))
                 scenarios = [(self.solver, perturbed_data[:, i], perturbed_prior_mean[:, i], i) for i in range(self.n_random_samples)]
                 results_list = pool.map(bounce, scenarios)
@@ -344,6 +345,7 @@ class RightSketchU1Strategy(RandomizationStrategy):
     def drawRandomVectors(self):
         self.projection_vectors = self.random_vector_generator(np.zeros_like(self.prior_mean), self.inv_prior_covariance, self.n_random_samples).T
         self.projection_vectors *= 1 / (self.n_random_samples**0.5)
+        print(np.linalg.norm(self.projection_vectors @ self.projection_vectors.T - np.eye(self.projection_vectors.shape[0])))
         
     def solve(self):
         self.convertCovariancesToMatrices()
@@ -398,7 +400,8 @@ class RightSketchU2Strategy(RandomizationStrategy):
             
         rhs = self.data - self.forward_map @ self.prior_mean
         temp = self.solver.solve(self.innovation, rhs)
-        return self.prior_mean + self.projection_vectors @ (self.projection_vectors.T @ (self.forward_map.transpose() @ temp))
+        
+        return self.prior_mean + (self.projection_vectors @ self.projection_vectors.T) @ (self.forward_map.transpose() @ temp)
 
 class EnkfStrategy(RandomizationStrategy):
     def __init__(self, data, forward_map, inv_noise_covariance, prior_mean, inv_prior_covariance, random_vector_generator, n_random_samples, solver):
@@ -470,7 +473,7 @@ class EnkfStrategy(RandomizationStrategy):
                 
             _func = solveRealizationParallel
             # solve in parallel
-            with mult_proc.Pool(processes=mult_proc.cpu_count(), initializer=bounce_init, initargs=(solveRealizationParallel,)) as pool:
+            with mult_proc.Pool(processes=50, initializer=bounce_init, initargs=(solveRealizationParallel,)) as pool:
                 results = np.zeros((self.parameter_dim, self.n_random_samples))
                 scenarios = [(self.solver, perturbed_data[:, i], perturbed_prior_mean[:, i], i) for i in range(self.n_random_samples)]
                 results_list = pool.map(bounce, scenarios)
@@ -645,7 +648,7 @@ class AllRandomizationStrategy(RandomizationStrategy):
                 
             _func = solveRealizationParallel
             # solve in parallel
-            with mult_proc.Pool(processes=mult_proc.cpu_count(), initializer=bounce_init, initargs=(solveRealizationParallel,)) as pool:
+            with mult_proc.Pool(processes=50, initializer=bounce_init, initargs=(solveRealizationParallel,)) as pool:
                 results = np.zeros((self.parameter_dim, self.n_random_samples))
                 scenarios = [(self.solver, perturbed_data[:, i], perturbed_prior_mean[:, i], i) for i in range(self.n_random_samples)]
                 results_list = pool.map(bounce, scenarios)
